@@ -11,5 +11,10 @@ Aplicación de escritorio desarrollada en **Python (arquitectura MVC)** con inte
 ## Ejecución
 1. Importar el esquema y catálogos SQL en MySQL.
 2. Configurar las credenciales de conexión en `config/database.py`.
-3. Instalar dependencias: `pip install -r requirements.txt`
-4. Ejecutar `python seed_admin.py` para crear el usuario Administrador y luego `python main.py`.
+3. Ejecutar los siguientes comando en git bash `git clone https://github.com/luisito2006espi-max/sistema-gestion-voluntariado-bolivia.git`
+4. Luego busca la carpeta "sistema-gestion-voluntariado-bolivia" `cd sistema-gestion-voluntariado-bolivia`
+5. En el git introduce `git cheackout main`
+6. Para instalar las librerias necesarias: `python -m venv venv`
+7. luego: `source venv/Scripts/activate`
+8. Por ultimo: `pip install -r requirements.txt`
+9. Ejecutar `python seed_admin.py` para crear el usuario Administrador y luego `python main.py`.

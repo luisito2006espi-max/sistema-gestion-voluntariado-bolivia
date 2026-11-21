@@ -1,137 +1,158 @@
-from datetime import date
+import re
+import unicodedata
+from datetime import date, datetime
 from models.voluntario_model import VoluntarioModel
 from models.auth_model import AuthModel
 
 
 class VoluntarioController:
-    EDAD_MINIMA = 18
-    EDAD_MAXIMA = 60
+    _RE_LETRAS = re.compile(r"^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s]+$")
+    _RE_NUMEROS = re.compile(r"^\d+$")
+    _RE_CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
     def __init__(self):
         self.model = VoluntarioModel()
 
-    def validar_fecha_nacimiento_partes(
-        self, anio_str: str, mes_num: int, dia_str: str
-    ) -> tuple[bool, str, date | None, int | None]:
-        """Valida que la fecha sea real y que la edad esté entre 18 y 60 años."""
-        try:
-            anio = int(anio_str)
-            dia = int(dia_str)
-            fecha_nac = date(anio, mes_num, dia)
-        except ValueError:
-            return False, "Selecciona una fecha de nacimiento válida (Día, Mes y Año).", None, None
+    @staticmethod
+    def _normalizar_texto_usuario(texto: str) -> str:
+        sin_tildes = "".join(
+            c for c in unicodedata.normalize("NFD", texto.strip().lower())
+            if unicodedata.category(c) != "Mn"
+        )
+        return re.sub(r"[^a-z0-9]", "", sin_tildes)
 
-        edad = self.model.calcular_edad(fecha_nac)
-        if edad < self.EDAD_MINIMA:
-            return (
-                False,
-                f"El postulante tiene {edad} años. No se permiten voluntarios menores de {self.EDAD_MINIMA} años.",
-                fecha_nac,
-                edad
-            )
-        if edad > self.EDAD_MAXIMA:
-            return (
-                False,
-                f"El postulante tiene {edad} años. No se permiten voluntarios mayores de {self.EDAD_MAXIMA} años.",
-                fecha_nac,
-                edad
-            )
+    @staticmethod
+    def parsear_fecha(fecha_str: str) -> date:
+        texto = (fecha_str or "").strip()
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+            try:
+                return datetime.strptime(texto, fmt).date()
+            except ValueError:
+                continue
+        raise ValueError("La fecha de nacimiento debe tener el formato AAAA-MM-DD.")
 
-        return True, "", fecha_nac, edad
+    def calcular_edad(self, fecha_nac: date) -> int:
+        return self.model.calcular_edad(fecha_nac)
 
-    def inscribir_postulante(self, datos: dict, id_usuario_registra: int) -> tuple[bool, str]:
-        ci = datos.get("ci", "").strip()
-        nombres = datos.get("nombres", "").strip()
-        ap_pat = datos.get("apellido_paterno", "").strip()
-        ap_mat = datos.get("apellido_materno", "").strip()
+    def registrar_postulante(self, datos: dict) -> tuple[bool, str]:
+        ci = (datos.get("ci") or "").strip()
+        nombres = " ".join((datos.get("nombres") or "").split())
+        ap_paterno = " ".join((datos.get("apellido_paterno") or "").split())
+        ap_materno = " ".join((datos.get("apellido_materno") or "").split())
+        telefono = (datos.get("telefono") or "").strip()
+        correo = (datos.get("correo") or "").strip()
+        direccion = " ".join((datos.get("direccion") or "").split())
+        fecha_nac_raw = datos.get("fecha_nacimiento")
 
+        # 1. Validaciones obligatorias y estrictas (números vs. letras)
         if not ci:
             return False, "El Carnet de Identidad (CI) es obligatorio."
-        if not nombres:
-            return False, "El campo Nombres es obligatorio."
-        if not ap_pat:
-            return False, "El Apellido Paterno es obligatorio."
+        if not self._RE_NUMEROS.match(ci) or not (5 <= len(ci) <= 12):
+            return False, "El CI debe contener únicamente números (entre 5 y 12 dígitos)."
 
-        ok_fecha, msg_fecha, fecha_nac, _edad = self.validar_fecha_nacimiento_partes(
-            datos.get("anio", ""),
-            datos.get("mes_num", 0),
-            datos.get("dia", "")
-        )
-        if not ok_fecha:
-            return False, msg_fecha
+        if not nombres or not self._RE_LETRAS.match(nombres):
+            return False, "El campo Nombres es obligatorio y solo admite letras."
 
-        # Esquema v2.0: enviar None (NULL) en campos opcionales vacíos
+        if not ap_paterno or not self._RE_LETRAS.match(ap_paterno):
+            return False, "El Apellido Paterno es obligatorio y solo admite letras."
+
+        if ap_materno and not self._RE_LETRAS.match(ap_materno):
+            return False, "El Apellido Materno solo admite letras."
+
+        # 2. Validación de fecha de nacimiento y rango de edad (18 - 60 años)
+        try:
+            fecha_nac = (
+                fecha_nac_raw
+                if isinstance(fecha_nac_raw, date)
+                else self.parsear_fecha(str(fecha_nac_raw))
+            )
+        except ValueError as e:
+            return False, str(e)
+
+        if fecha_nac >= date.today():
+            return False, "La fecha de nacimiento no puede ser igual o posterior a hoy."
+
+        edad = self.calcular_edad(fecha_nac)
+        if edad < 18 or edad > 60:
+            return False, f"Edad calculada: {edad} años. El voluntario debe tener entre 18 y 60 años."
+
+        # 3. Validaciones de contacto opcionales
+        if telefono and (not self._RE_NUMEROS.match(telefono) or not (7 <= len(telefono) <= 10)):
+            return False, "El teléfono debe contener únicamente números (7 a 10 dígitos)."
+
+        if correo and not self._RE_CORREO.match(correo):
+            return False, "El formato del correo electrónico no es válido."
+
         payload = {
             "ci": ci,
-            "nombres": nombres,
-            "apellido_paterno": ap_pat,
-            "apellido_materno": ap_mat or None,
+            "nombres": nombres.title(),
+            "apellido_paterno": ap_paterno.title(),
+            "apellido_materno": ap_materno.title() if ap_materno else None,
             "fecha_nacimiento": fecha_nac,
-            "telefono": datos.get("telefono", "").strip() or None,
-            "correo": datos.get("correo", "").strip() or None,
-            "direccion": datos.get("direccion", "").strip() or None,
-            "id_usuario_registra": id_usuario_registra
+            "telefono": telefono if telefono else None,
+            "correo": correo.lower() if correo else None,
+            "direccion": direccion if direccion else None,
+            "id_usuario_registra": datos.get("id_usuario_registra"),
         }
 
         try:
             self.model.registrar_postulante(payload)
-            return True, f"Postulante '{nombres} {ap_pat}' inscrito correctamente."
+            return True, f"Postulante {payload['nombres']} {payload['apellido_paterno']} ({edad} años) registrado correctamente."
         except Exception as e:
             return False, str(e)
 
-    def obtener_voluntarios(self, filtro_estado: str = "Todos", busqueda: str = "") -> list[dict]:
-        return self.model.listar_voluntarios(filtro_estado, busqueda)
+    def listar_voluntarios(self, filtro_estado: str = "Todos", busqueda: str = "") -> list[dict]:
+        return self.model.listar_voluntarios(filtro_estado=filtro_estado, busqueda=busqueda)
 
-    def aprobar_postulante(self, voluntario: dict) -> tuple[bool, str]:
+    def admitir_voluntario(self, voluntario: dict) -> tuple[bool, str | dict]:
         if not voluntario:
-            return False, "Selecciona primero un postulante de la tabla."
-        if voluntario["estado"] != "Postulante":
-            return False, f"Solo se pueden admitir personas en estado 'Postulante' (actual: {voluntario['estado']})."
+            return False, "Selecciona un postulante de la tabla."
+        if voluntario.get("estado") != "Postulante":
+            return False, "Solo se puede admitir a registros con estado 'Postulante'."
 
-        primer_nombre = voluntario["nombres"].strip().split()[0].lower()
-        ap_pat = voluntario["apellido_paterno"].strip().split()[0].lower()
-        sufijo_ci = voluntario["ci"].strip()[-3:]
+        primer_nombre = self._normalizar_texto_usuario(voluntario["nombres"].split()[0])
+        primer_apellido = self._normalizar_texto_usuario(voluntario["apellido_paterno"].split()[0])
+        ci_limpio = re.sub(r"\D", "", str(voluntario["ci"]))
 
-        username = f"{primer_nombre}.{ap_pat}{sufijo_ci}"
-        password_temp = f"Scb{voluntario['ci'].strip()}"
-        password_hash = AuthModel.hashear_password(password_temp)
+        base_user = f"{primer_nombre}.{primer_apellido}" if primer_nombre and primer_apellido else f"vol.{ci_limpio}"
+        password_plana = f"Scb{ci_limpio}"
+        password_hash = AuthModel.hashear_password(password_plana)
 
-        try:
-            self.model.admitir_voluntario_transaccion(
-                id_voluntario=voluntario["id_voluntario"],
-                username=username,
-                password_hash=password_hash
-            )
-            return True, (
-                f"¡Voluntario admitido exitosamente!\n\n"
-                f"Credenciales generadas:\n"
-                f"• Usuario: {username}\n"
-                f"• Contraseña temporal: {password_temp}"
-            )
-        except Exception as e:
-            return False, str(e)
+        candidatos = [
+            base_user,
+            f"{base_user}.{ci_limpio[-2:]}" if len(ci_limpio) >= 2 else f"{base_user}1",
+            f"{base_user}.{ci_limpio}"
+        ]
 
-    def rechazar_postulante(self, voluntario: dict) -> tuple[bool, str]:
+        ultimo_error = "No se pudo generar un usuario único."
+        for usuario_candidato in candidatos:
+            try:
+                self.model.admitir_voluntario_transaccion(
+                    id_voluntario=voluntario["id_voluntario"],
+                    username=usuario_candidato,
+                    password_hash=password_hash
+                )
+                return True, {
+                    "nombre": voluntario["nombre_completo"],
+                    "usuario": usuario_candidato,
+                    "password": password_plana
+                }
+            except ValueError as e:
+                ultimo_error = str(e)
+                if "ya existe" in ultimo_error.lower():
+                    continue
+                return False, ultimo_error
+            except Exception as e:
+                return False, str(e)
+
+        return False, ultimo_error
+
+    def cambiar_estado(self, voluntario: dict, nuevo_estado: str) -> tuple[bool, str]:
         if not voluntario:
-            return False, "Selecciona primero un postulante de la tabla."
-        if voluntario["estado"] != "Postulante":
-            return False, "Solo se pueden rechazar postulantes pendientes."
-
+            return False, "Selecciona un registro de la tabla."
         try:
-            self.model.cambiar_estado_voluntario(voluntario["id_voluntario"], "Rechazado")
-            return True, f"La postulación de {voluntario['nombre_completo']} ha sido rechazada."
-        except Exception as e:
-            return False, str(e)
-
-    def desactivar_voluntario(self, voluntario: dict) -> tuple[bool, str]:
-        if not voluntario:
-            return False, "Selecciona un voluntario admitido de la tabla."
-        if voluntario["estado"] != "Admitido":
-            return False, "Solo se pueden desactivar voluntarios en estado 'Admitido'."
-
-        try:
-            self.model.cambiar_estado_voluntario(voluntario["id_voluntario"], "Inactivo")
-            return True, f"El voluntario {voluntario['nombre_completo']} ha sido desactivado."
+            self.model.cambiar_estado_voluntario(voluntario["id_voluntario"], nuevo_estado)
+            return True, f"Estado actualizado a '{nuevo_estado}' correctamente."
         except Exception as e:
             return False, str(e)
 

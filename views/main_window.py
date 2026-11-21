@@ -2,6 +2,7 @@ import tkinter as tk
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from controllers.auth_controller import AuthController
+from views.ui_components import PALETTE, SaveTheChildrenLogo
 from views.dashboard_view import DashboardView
 from views.voluntarios_view import InscripcionVoluntarioView, AdmisionVoluntariosView
 from views.actividades_view import GestionActividadesView, AsignarVoluntariosView
@@ -13,85 +14,135 @@ from views.auditoria_view import AuditoriaAccesosView
 
 
 class MainWindow(tb.Frame):
+    """Ventana principal con barra de navegación superior y paleta institucional."""
+
     def __init__(self, master, sesion: dict, on_logout):
         super().__init__(master)
         self.master = master
         self.sesion = sesion
         self.on_logout = on_logout
         self.botones_menu = {}
+        self.opcion_actual = ""
 
         self.pack(fill=BOTH, expand=True)
         self._construir_ui()
 
     def _construir_ui(self):
-        sidebar = tk.Frame(self, bg="#7F1D1D", width=245, padx=16, pady=24)
-        sidebar.pack(side="left", fill="y")
-        sidebar.pack_propagate(False)
+        # =====================================================================
+        # 1. FRANJA SUPERIOR INSTITUCIONAL (NEGRO + ACENTO ROJO)
+        # =====================================================================
+        tk.Frame(self, bg=PALETTE["rojo"], height=4).pack(fill="x")
+
+        top_header = tk.Frame(self, bg=PALETTE["negro"], padx=24, pady=10)
+        top_header.pack(fill="x")
+
+        # Marca izquierda: Logo + Título
+        brand_box = tk.Frame(top_header, bg=PALETTE["negro"])
+        brand_box.pack(side="left")
+
+        SaveTheChildrenLogo(brand_box, size=38, bg=PALETTE["negro"]).pack(side="left", padx=(0, 12))
+
+        title_stack = tk.Frame(brand_box, bg=PALETTE["negro"])
+        title_stack.pack(side="left")
 
         tk.Label(
-            sidebar,
-            text="Save the Children\nBolivia",
-            font=("Segoe UI", 15, "bold"),
-            bg="#7F1D1D",
-            fg="#FFFFFF",
-            justify="left"
-        ).pack(anchor="w", pady=(0, 20))
-
-        user_card = tk.Frame(sidebar, bg="#991B1B", padx=12, pady=10)
-        user_card.pack(fill="x", pady=(0, 20))
-
-        tk.Label(
-            user_card,
-            text=self.sesion["nombre_mostrar"],
-            font=("Segoe UI", 10, "bold"),
-            bg="#991B1B",
-            fg="#FFFFFF",
+            title_stack,
+            text="Save the Children Bolivia",
+            font=("Segoe UI", 13, "bold"),
+            bg=PALETTE["negro"],
+            fg=PALETTE["blanco"],
             anchor="w"
         ).pack(fill="x")
 
         tk.Label(
-            user_card,
-            text=f"Rol: {self.sesion['rol']}",
-            font=("Segoe UI", 9),
-            bg="#991B1B",
-            fg="#FECACA",
+            title_stack,
+            text="Sistema de Gestión de Voluntariado y Operaciones",
+            font=("Segoe UI", 8),
+            bg=PALETTE["negro"],
+            fg=PALETTE["plomo_claro"],
             anchor="w"
         ).pack(fill="x")
 
-        rol = self.sesion["rol"]
-        opciones_menu = self._obtener_opciones_por_rol(rol)
+        # Controles derechos: Tarjeta de Usuario + Cerrar Sesión
+        right_box = tk.Frame(top_header, bg=PALETTE["negro"])
+        right_box.pack(side="right")
+
+        user_pill = tk.Frame(right_box, bg=PALETTE["negro_suave"], padx=12, pady=6)
+        user_pill.pack(side="left", padx=(0, 12))
+
+        tk.Label(
+            user_pill,
+            text=f"👤  {self.sesion['nombre_mostrar']}",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["negro_suave"],
+            fg=PALETTE["blanco"]
+        ).pack(side="left", padx=(0, 8))
+
+        tk.Label(
+            user_pill,
+            text=self.sesion["rol"].upper(),
+            font=("Segoe UI", 7, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            padx=8,
+            pady=2
+        ).pack(side="left")
+
+        btn_salir = tk.Button(
+            right_box,
+            text="Cerrar Sesión",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["negro_suave"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=14,
+            pady=7,
+            cursor="hand2",
+            command=self._cerrar_sesion
+        )
+        btn_salir.pack(side="left")
+        btn_salir.bind("<Enter>", lambda _e: btn_salir.config(bg=PALETTE["rojo"]))
+        btn_salir.bind("<Leave>", lambda _e: btn_salir.config(bg=PALETTE["negro_suave"]))
+
+        # =====================================================================
+        # 2. BARRA HORIZONTAL DE PESTAÑAS (MISMO NOMBRE EN CADA MÓDULO)
+        # =====================================================================
+        nav_bar = tk.Frame(self, bg=PALETTE["blanco"], padx=18, pady=7)
+        nav_bar.pack(fill="x")
+
+        tk.Frame(self, bg=PALETTE["plomo_borde"], height=1).pack(fill="x")
+
+        opciones_menu = self._obtener_opciones_por_rol(self.sesion["rol"])
 
         for texto_btn in opciones_menu:
             btn = tk.Button(
-                sidebar,
+                nav_bar,
                 text=texto_btn,
-                font=("Segoe UI", 10),
-                bg="#7F1D1D",
-                fg="#FEF2F2",
-                activebackground="#B91C1C",
-                activeforeground="#FFFFFF",
+                font=("Segoe UI", 9),
+                bg=PALETTE["blanco"],
+                fg=PALETTE["negro"],
+                activebackground=PALETTE["rojo_hover"],
+                activeforeground=PALETTE["blanco"],
                 bd=0,
-                anchor="w",
-                padx=10,
-                pady=8,
+                padx=9,
+                pady=6,
                 cursor="hand2",
                 command=lambda t=texto_btn: self._navegar(t)
             )
-            btn.pack(fill="x", pady=1)
+            btn.pack(side="left", padx=2)
+            btn.bind("<Enter>", lambda _e, t=texto_btn: self._on_tab_hover(t, True))
+            btn.bind("<Leave>", lambda _e, t=texto_btn: self._on_tab_hover(t, False))
             self.botones_menu[texto_btn] = btn
 
-        tb.Button(
-            sidebar,
-            text="Cerrar Sesión",
-            bootstyle="light-outline",
-            command=self._cerrar_sesion
-        ).pack(side="bottom", fill="x")
+        # =====================================================================
+        # 3. ÁREA CENTRAL DE CONTENIDO
+        # =====================================================================
+        self.area_contenido = tk.Frame(self, bg=PALETTE["plomo_fondo"], padx=26, pady=20)
+        self.area_contenido.pack(fill=BOTH, expand=True)
 
-        self.area_contenido = tk.Frame(self, bg="#FFF5F5", padx=28, pady=22)
-        self.area_contenido.pack(side="right", fill=BOTH, expand=True)
-
-        primera_opcion = opciones_menu[0]
-        self._navegar(primera_opcion)
+        self._navegar(opciones_menu[0])
 
     def _obtener_opciones_por_rol(self, rol: str) -> list[str]:
         if rol == "Administrador":
@@ -111,12 +162,28 @@ class MainWindow(tb.Frame):
             "⏱  Mi Historial de Horas"
         ]
 
+    def _on_tab_hover(self, opcion: str, entrando: bool):
+        if opcion == self.opcion_actual:
+            return
+        btn = self.botones_menu.get(opcion)
+        if btn:
+            btn.config(bg=PALETTE["plomo_fondo"] if entrando else PALETTE["blanco"])
+
     def _resaltar_boton_activo(self, opcion_activa: str):
+        self.opcion_actual = opcion_activa
         for texto, btn in self.botones_menu.items():
             if texto == opcion_activa:
-                btn.config(bg="#B91C1C", font=("Segoe UI", 10, "bold"))
+                btn.config(
+                    bg=PALETTE["rojo"],
+                    fg=PALETTE["blanco"],
+                    font=("Segoe UI", 9, "bold")
+                )
             else:
-                btn.config(bg="#7F1D1D", font=("Segoe UI", 10))
+                btn.config(
+                    bg=PALETTE["blanco"],
+                    fg=PALETTE["negro"],
+                    font=("Segoe UI", 9)
+                )
 
     def _navegar(self, opcion: str):
         self._resaltar_boton_activo(opcion)

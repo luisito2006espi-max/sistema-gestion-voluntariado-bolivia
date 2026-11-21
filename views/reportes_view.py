@@ -7,95 +7,191 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 
 from controllers.reporte_controller import ReporteController
+from views.ui_components import PALETTE, RoundedCard
 
 
-class ReportesRendimientoView(tb.Frame):
+class ReportesRendimientoView(tk.Frame):
     """Vista de Analítica, Gráficos de 2 Variables, Rendimiento y Exportación Excel."""
 
-    PALETA_ROJA = ["#991B1B", "#DC2626", "#F87171", "#FBBF24", "#7F1D1D", "#FCA5A5"]
+    PALETA_GRAFICOS = [
+        PALETTE["rojo"],
+        PALETTE["negro"],
+        PALETTE["rojo_oscuro"],
+        PALETTE["plomo_texto"],
+        "#EF4444",
+        PALETTE["plomo_claro"]
+    ]
 
     def __init__(self, master, sesion: dict):
-        super().__init__(master)
+        super().__init__(master, bg=PALETTE["plomo_fondo"])
         self.sesion = sesion
         self.controller = ReporteController()
         self.paquete_actual = None
 
         self.pack(fill=BOTH, expand=True)
+        self._configurar_estilos_tabla()
         self._construir_ui()
         self._cargar_reportes(usar_todo=True)
 
-    def _construir_ui(self):
-        # Encabezado + Botón Exportar Excel
-        header = tk.Frame(self, bg="#FFF5F5")
-        header.pack(fill="x", pady=(0, 10))
+    def _configurar_estilos_tabla(self):
+        """Aplica la misma configuración limpia de tablas que el Panel General."""
+        style = tb.Style()
+        style.configure(
+            "Rep.Treeview",
+            background=PALETTE["blanco"],
+            foreground=PALETTE["negro"],
+            fieldbackground=PALETTE["blanco"],
+            rowheight=29,
+            borderwidth=0,
+            font=("Segoe UI", 9)
+        )
+        style.configure(
+            "Rep.Treeview.Heading",
+            background=PALETTE["plomo_fondo"],
+            foreground=PALETTE["negro"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 9, "bold"),
+            padding=(8, 7)
+        )
+        style.map(
+            "Rep.Treeview.Heading",
+            background=[("active", PALETTE["plomo_borde"])]
+        )
+        style.map(
+            "Rep.Treeview",
+            background=[("selected", PALETTE["rojo_suave"])],
+            foreground=[("selected", PALETTE["negro"])]
+        )
 
-        titulos_frame = tk.Frame(header, bg="#FFF5F5")
+    def _construir_ui(self):
+        # =====================================================================
+        # 1. ENCABEZADO + BOTÓN EXPORTAR EXCEL
+        # =====================================================================
+        header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
+        header.pack(fill="x", pady=(0, 12))
+
+        titulos_frame = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         titulos_frame.pack(side="left")
+
+        tk.Label(
+            titulos_frame,
+            text="SAVE THE CHILDREN BOLIVIA  •  INTELIGENCIA OPERATIVA",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["rojo"]
+        ).pack(anchor="w")
 
         tk.Label(
             titulos_frame,
             text="Reportes Estadísticos y Rendimiento",
             font=("Segoe UI", 20, "bold"),
-            bg="#FFF5F5",
-            fg="#7F1D1D"
-        ).pack(anchor="w")
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(2, 2))
 
         tk.Label(
             titulos_frame,
             text="Análisis cuantitativo, cualitativo, evolución temporal y desempeño de voluntarios.",
             font=("Segoe UI", 10),
-            bg="#FFF5F5",
-            fg="#64748B"
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["plomo_texto"]
         ).pack(anchor="w")
 
-        tb.Button(
+        btn_excel = tk.Button(
             header,
-            text="📥 Exportar a Excel (.xlsx)",
-            bootstyle="success",
+            text="📥  Exportar a Excel (.xlsx)",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["negro"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=16,
+            pady=9,
+            cursor="hand2",
             command=self._exportar_excel
-        ).pack(side="right", ipady=6, ipadx=10)
+        )
+        btn_excel.pack(side="right", pady=8)
+        btn_excel.bind("<Enter>", lambda _e: btn_excel.config(bg=PALETTE["rojo"]))
+        btn_excel.bind("<Leave>", lambda _e: btn_excel.config(bg=PALETTE["negro"]))
 
-        # Barra de Filtros por Fecha
-        filtro_bar = tk.Frame(self, bg="#FFFFFF", padx=16, pady=10)
-        filtro_bar.pack(fill="x", pady=(0, 10))
+        # =====================================================================
+        # 2. BARRA CURVA DE FILTROS POR FECHA
+        # =====================================================================
+        filtro_card = RoundedCard(
+            self,
+            radius=18,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=18,
+            pady=11,
+            expand_body=False
+        )
+        filtro_card.pack(fill="x", pady=(0, 12))
 
-        tk.Label(filtro_bar, text="Desde:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(side="left", padx=(0, 6))
-        self.date_desde = tb.DateEntry(filtro_bar, bootstyle="danger", dateformat="%Y-%m-%d", width=13)
+        fb = filtro_card.body
+
+        tk.Label(fb, text="Desde:", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).pack(side="left", padx=(0, 6))
+        self.date_desde = tb.DateEntry(fb, bootstyle="danger", dateformat="%Y-%m-%d", width=13)
         self.date_desde.pack(side="left", padx=(0, 14))
 
-        tk.Label(filtro_bar, text="Hasta:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(side="left", padx=(0, 6))
-        self.date_hasta = tb.DateEntry(filtro_bar, bootstyle="danger", dateformat="%Y-%m-%d", width=13)
+        tk.Label(fb, text="Hasta:", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).pack(side="left", padx=(0, 6))
+        self.date_hasta = tb.DateEntry(fb, bootstyle="danger", dateformat="%Y-%m-%d", width=13)
         self.date_hasta.pack(side="left", padx=(0, 14))
 
-        tb.Button(
-            filtro_bar, text="🔍 Filtrar Rango", bootstyle="danger",
+        btn_filtrar = tk.Button(
+            fb,
+            text="🔍 Filtrar Rango",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=14,
+            pady=6,
+            cursor="hand2",
             command=lambda: self._cargar_reportes(usar_todo=False)
-        ).pack(side="left", padx=(0, 8))
+        )
+        btn_filtrar.pack(side="left", padx=(0, 8))
 
-        tb.Button(
-            filtro_bar, text="Ver Todo el Historial", bootstyle="danger-outline",
+        btn_todo = tk.Button(
+            fb,
+            text="Ver Todo el Historial",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["plomo_borde"],
+            bd=0,
+            padx=14,
+            pady=6,
+            cursor="hand2",
             command=lambda: self._cargar_reportes(usar_todo=True)
-        ).pack(side="left")
+        )
+        btn_todo.pack(side="left")
 
         self.lbl_periodo = tk.Label(
-            filtro_bar,
+            fb,
             text="Mostrando: Todo el historial",
             font=("Segoe UI", 9, "bold"),
-            bg="#FEF2F2",
-            fg="#7F1D1D",
-            padx=10,
-            pady=4
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            padx=12,
+            pady=5
         )
         self.lbl_periodo.pack(side="right")
 
-        # Notebook con 4 sub-pestañas analíticas
+        # =====================================================================
+        # 3. NOTEBOOK CON 4 SUB-PESTAÑAS ANALÍTICAS
+        # =====================================================================
         self.notebook = tb.Notebook(self, bootstyle="danger")
         self.notebook.pack(fill=BOTH, expand=True)
 
-        self.tab_rendimiento = tk.Frame(self.notebook, bg="#FFF5F5", padx=10, pady=10)
-        self.tab_voluntarios = tk.Frame(self.notebook, bg="#FFF5F5", padx=10, pady=10)
-        self.tab_actividades = tk.Frame(self.notebook, bg="#FFF5F5", padx=10, pady=10)
-        self.tab_donaciones = tk.Frame(self.notebook, bg="#FFF5F5", padx=10, pady=10)
+        self.tab_rendimiento = tk.Frame(self.notebook, bg=PALETTE["plomo_fondo"], padx=8, pady=10)
+        self.tab_voluntarios = tk.Frame(self.notebook, bg=PALETTE["plomo_fondo"], padx=8, pady=10)
+        self.tab_actividades = tk.Frame(self.notebook, bg=PALETTE["plomo_fondo"], padx=8, pady=10)
+        self.tab_donaciones = tk.Frame(self.notebook, bg=PALETTE["plomo_fondo"], padx=8, pady=10)
 
         self.notebook.add(self.tab_rendimiento, text="  🏆 Rendimiento y Asistencia  ")
         self.notebook.add(self.tab_voluntarios, text="  👥 Voluntarios (Tiempo y Estado)  ")
@@ -158,15 +254,20 @@ class ReportesRendimientoView(tb.Frame):
         canvas.get_tk_widget().pack(fill=BOTH, expand=True)
 
     def _dibujar_sin_datos(self, ax, titulo: str):
-        ax.set_title(titulo, fontsize=10, fontweight="bold", color="#7F1D1D", pad=10)
-        ax.text(0.5, 0.5, "Sin datos registrados en este período", ha="center", va="center", fontsize=9, color="#64748B")
+        ax.set_title(titulo, fontsize=10, fontweight="bold", color=PALETTE["negro"], pad=10)
+        ax.text(
+            0.5, 0.5,
+            "Sin datos registrados en este período",
+            ha="center", va="center",
+            fontsize=9, color=PALETTE["plomo_texto"]
+        )
         ax.set_xticks([])
         ax.set_yticks([])
         for spine in ax.spines.values():
             spine.set_visible(False)
 
     def _grafico_pastel(self, parent, etiquetas: list[str], valores: list[float], titulo: str):
-        fig = Figure(figsize=(4.4, 3.1), dpi=95, facecolor="#FFFFFF")
+        fig = Figure(figsize=(4.4, 2.8), dpi=95, facecolor=PALETTE["blanco"])
         ax = fig.add_subplot(111)
 
         pares = [(e, v) for e, v in zip(etiquetas, valores) if v > 0]
@@ -174,31 +275,31 @@ class ReportesRendimientoView(tb.Frame):
             self._dibujar_sin_datos(ax, titulo)
         else:
             labs, vals = zip(*pares)
-            colores = [self.PALETA_ROJA[i % len(self.PALETA_ROJA)] for i in range(len(vals))]
+            colores = [self.PALETA_GRAFICOS[i % len(self.PALETA_GRAFICOS)] for i in range(len(vals))]
             ax.pie(
                 vals,
                 labels=labs,
                 autopct="%1.1f%%",
                 startangle=140,
                 colors=colores,
-                textprops={"fontsize": 8, "color": "#1E293B"}
+                textprops={"fontsize": 8, "color": PALETTE["negro"]}
             )
-            ax.set_title(titulo, fontsize=10, fontweight="bold", color="#7F1D1D", pad=8)
+            ax.set_title(titulo, fontsize=10, fontweight="bold", color=PALETTE["negro"], pad=8)
 
         fig.tight_layout()
         self._incrustar_figura(parent, fig)
 
     def _grafico_linea_tiempo(self, parent, periodos: list[str], valores: list[float], titulo: str, ylabel: str):
-        fig = Figure(figsize=(4.8, 3.1), dpi=95, facecolor="#FFFFFF")
+        fig = Figure(figsize=(4.8, 2.8), dpi=95, facecolor=PALETTE["blanco"])
         ax = fig.add_subplot(111)
 
         if not periodos:
             self._dibujar_sin_datos(ax, titulo)
         else:
-            ax.plot(periodos, valores, marker="o", color="#B91C1C", linewidth=2.2, markersize=6)
-            ax.fill_between(periodos, valores, color="#FECACA", alpha=0.35)
-            ax.set_title(titulo, fontsize=10, fontweight="bold", color="#7F1D1D", pad=8)
-            ax.set_ylabel(ylabel, fontsize=8, color="#475569")
+            ax.plot(periodos, valores, marker="o", color=PALETTE["rojo"], linewidth=2.2, markersize=6)
+            ax.fill_between(periodos, valores, color=PALETTE["rojo_suave"], alpha=0.55)
+            ax.set_title(titulo, fontsize=10, fontweight="bold", color=PALETTE["negro"], pad=8)
+            ax.set_ylabel(ylabel, fontsize=8, color=PALETTE["plomo_texto"])
             ax.tick_params(axis="x", labelsize=8, rotation=20)
             ax.tick_params(axis="y", labelsize=8)
             ax.grid(axis="y", linestyle="--", alpha=0.4)
@@ -209,7 +310,7 @@ class ReportesRendimientoView(tb.Frame):
         self._incrustar_figura(parent, fig)
 
     def _grafico_barras_horizontales(self, parent, etiquetas: list[str], valores: list[float], titulo: str, xlabel: str):
-        fig = Figure(figsize=(4.8, 3.1), dpi=95, facecolor="#FFFFFF")
+        fig = Figure(figsize=(4.8, 2.8), dpi=95, facecolor=PALETTE["blanco"])
         ax = fig.add_subplot(111)
 
         if not etiquetas:
@@ -217,12 +318,12 @@ class ReportesRendimientoView(tb.Frame):
         else:
             etiquetas_cortas = [(e[:22] + "...") if len(e) > 25 else e for e in etiquetas]
             y_pos = range(len(etiquetas_cortas))
-            ax.barh(y_pos, valores, color="#B91C1C", height=0.55)
+            ax.barh(y_pos, valores, color=PALETTE["rojo"], height=0.55)
             ax.set_yticks(list(y_pos))
             ax.set_yticklabels(etiquetas_cortas, fontsize=8)
             ax.invert_yaxis()
-            ax.set_xlabel(xlabel, fontsize=8, color="#475569")
-            ax.set_title(titulo, fontsize=10, fontweight="bold", color="#7F1D1D", pad=8)
+            ax.set_xlabel(xlabel, fontsize=8, color=PALETTE["plomo_texto"])
+            ax.set_title(titulo, fontsize=10, fontweight="bold", color=PALETTE["negro"], pad=8)
             ax.tick_params(axis="x", labelsize=8)
             ax.grid(axis="x", linestyle="--", alpha=0.4)
             ax.spines["top"].set_visible(False)
@@ -240,38 +341,49 @@ class ReportesRendimientoView(tb.Frame):
         rend = self.paquete_actual["rendimiento"]
         kpis = self.paquete_actual["kpis"]
 
-        # Parte superior: 2 gráficos lado a lado
-        top_charts = tk.Frame(self.tab_rendimiento, bg="#FFF5F5")
+        top_charts = tk.Frame(self.tab_rendimiento, bg=PALETTE["plomo_fondo"])
         top_charts.pack(fill="x", pady=(0, 10))
         top_charts.columnconfigure(0, weight=55)
         top_charts.columnconfigure(1, weight=45)
 
-        card_g1 = tk.Frame(top_charts, bg="#FFFFFF", padx=8, pady=8)
+        card_g1 = RoundedCard(
+            top_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=10, pady=10,
+            expand_body=True, height=245
+        )
         card_g1.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         top_8 = [r for r in rend if r["total_horas"] > 0][:8]
         self._grafico_barras_horizontales(
-            card_g1,
+            card_g1.body,
             [r["voluntario"] for r in top_8],
             [r["total_horas"] for r in top_8],
             "Top Voluntarios por Horas Cumplidas",
             "Horas Totales"
         )
 
-        card_g2 = tk.Frame(top_charts, bg="#FFFFFF", padx=8, pady=8)
+        card_g2 = RoundedCard(
+            top_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=10, pady=10,
+            expand_body=True, height=245
+        )
         card_g2.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._grafico_pastel(
-            card_g2,
+            card_g2.body,
             ["Asistencias", "Inasistencias"],
             [kpis["total_asistencias"], kpis["total_inasistencias"]],
             "Cumplimiento de Asistencia (Cualitativa)"
         )
 
-        # Parte inferior: Tabla completa de rendimiento (SIN ID)
-        card_tbl = tk.Frame(self.tab_rendimiento, bg="#FFFFFF", padx=12, pady=10)
+        # Tabla inferior unificada
+        card_tbl = RoundedCard(
+            self.tab_rendimiento, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=16, pady=12,
+            expand_body=True
+        )
         card_tbl.pack(fill=BOTH, expand=True)
 
         cols = ("ci", "voluntario", "estado", "asignadas", "asist", "faltas", "horas", "cumpl")
-        tbl = tb.Treeview(card_tbl, columns=cols, show="headings", height=6, bootstyle="danger")
+        tbl = tb.Treeview(card_tbl.body, columns=cols, show="headings", height=6, style="Rep.Treeview")
         headers = {
             "ci": ("CI", 90),
             "voluntario": ("Voluntario", 210),
@@ -286,7 +398,11 @@ class ReportesRendimientoView(tb.Frame):
             tbl.heading(c, text=txt)
             tbl.column(c, width=w, anchor="center" if c != "voluntario" else "w")
 
-        for r in rend:
+        tbl.tag_configure("par", background=PALETTE["blanco"])
+        tbl.tag_configure("impar", background="#F9FAFB")
+
+        for idx, r in enumerate(rend):
+            tag = "par" if idx % 2 == 0 else "impar"
             tbl.insert("", tk.END, values=(
                 r["ci"],
                 r["voluntario"],
@@ -296,7 +412,7 @@ class ReportesRendimientoView(tb.Frame):
                 r["inasistencias"],
                 f"{r['total_horas']:.2f}",
                 f"{r['porcentaje_cumplimiento']}%"
-            ))
+            ), tags=(tag,))
         tbl.pack(fill=BOTH, expand=True)
 
     # =========================================================================
@@ -309,50 +425,64 @@ class ReportesRendimientoView(tb.Frame):
         vol_estado = self.paquete_actual["vol_estado"]
         vol_reg = self.paquete_actual["vol_registrador"]
 
-        top_charts = tk.Frame(self.tab_voluntarios, bg="#FFF5F5")
+        top_charts = tk.Frame(self.tab_voluntarios, bg=PALETTE["plomo_fondo"])
         top_charts.pack(fill="x", pady=(0, 10))
         top_charts.columnconfigure(0, weight=52)
         top_charts.columnconfigure(1, weight=48)
 
-        card_g1 = tk.Frame(top_charts, bg="#FFFFFF", padx=8, pady=8)
+        card_g1 = RoundedCard(
+            top_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=10, pady=10,
+            expand_body=True, height=245
+        )
         card_g1.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self._grafico_linea_tiempo(
-            card_g1,
+            card_g1.body,
             [x["periodo"] for x in vol_tiempo],
             [x["cantidad"] for x in vol_tiempo],
             "Cantidad de Voluntarios Inscritos por Tiempo",
             "Postulantes"
         )
 
-        card_g2 = tk.Frame(top_charts, bg="#FFFFFF", padx=8, pady=8)
+        card_g2 = RoundedCard(
+            top_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=10, pady=10,
+            expand_body=True, height=245
+        )
         card_g2.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._grafico_pastel(
-            card_g2,
+            card_g2.body,
             [x["estado"] for x in vol_estado],
             [x["cantidad"] for x in vol_estado],
             "Distribución de Voluntarios por Estado"
         )
 
-        # Tabla inferior: Inscripciones por Usuario (Recepcionista/Admin)
-        card_tbl = tk.Frame(self.tab_voluntarios, bg="#FFFFFF", padx=12, pady=10)
+        card_tbl = RoundedCard(
+            self.tab_voluntarios, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=16, pady=12,
+            expand_body=True
+        )
         card_tbl.pack(fill=BOTH, expand=True)
 
         tk.Label(
-            card_tbl,
+            card_tbl.body,
             text="Relación: Personal que Registra vs. Cantidad de Postulantes Inscritos",
             font=("Segoe UI", 10, "bold"),
-            bg="#FFFFFF",
-            fg="#7F1D1D"
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(0, 6))
 
-        tbl = tb.Treeview(card_tbl, columns=("usuario", "cantidad"), show="headings", height=5, bootstyle="danger")
-        tbl.heading("usuario", text="Usuario (Recepcionista / Administrador)")
+        tbl = tb.Treeview(card_tbl.body, columns=("usuario", "cantidad"), show="headings", height=5, style="Rep.Treeview")
+        tbl.heading("usuario", text="Usuario (Administrador / Registrador)")
         tbl.heading("cantidad", text="Postulantes Registrados")
         tbl.column("usuario", width=350, anchor="w")
         tbl.column("cantidad", width=180, anchor="center")
+        tbl.tag_configure("par", background=PALETTE["blanco"])
+        tbl.tag_configure("impar", background="#F9FAFB")
 
-        for item in vol_reg:
-            tbl.insert("", tk.END, values=(item["registrador"], item["cantidad"]))
+        for idx, item in enumerate(vol_reg):
+            tag = "par" if idx % 2 == 0 else "impar"
+            tbl.insert("", tk.END, values=(item["registrador"], item["cantidad"]), tags=(tag,))
         tbl.pack(fill=BOTH, expand=True)
 
     # =========================================================================
@@ -365,36 +495,47 @@ class ReportesRendimientoView(tb.Frame):
         act_estado = self.paquete_actual["act_estado"]
         act_ocup = self.paquete_actual["act_ocupacion"]
 
-        top_charts = tk.Frame(self.tab_actividades, bg="#FFF5F5")
+        top_charts = tk.Frame(self.tab_actividades, bg=PALETTE["plomo_fondo"])
         top_charts.pack(fill="x", pady=(0, 10))
         top_charts.columnconfigure(0, weight=52)
         top_charts.columnconfigure(1, weight=48)
 
-        card_g1 = tk.Frame(top_charts, bg="#FFFFFF", padx=8, pady=8)
+        card_g1 = RoundedCard(
+            top_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=10, pady=10,
+            expand_body=True, height=245
+        )
         card_g1.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self._grafico_linea_tiempo(
-            card_g1,
+            card_g1.body,
             [x["periodo"] for x in act_tiempo],
             [x["cantidad"] for x in act_tiempo],
             "Cantidad de Actividades por Tiempo",
             "Actividades"
         )
 
-        card_g2 = tk.Frame(top_charts, bg="#FFFFFF", padx=8, pady=8)
+        card_g2 = RoundedCard(
+            top_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=10, pady=10,
+            expand_body=True, height=245
+        )
         card_g2.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._grafico_pastel(
-            card_g2,
+            card_g2.body,
             [x["estado"] for x in act_estado],
             [x["cantidad"] for x in act_estado],
             "Actividades por Estado (Cualitativa)"
         )
 
-        # Tabla inferior: Cupo Máximo vs. Voluntarios Asignados
-        card_tbl = tk.Frame(self.tab_actividades, bg="#FFFFFF", padx=12, pady=10)
+        card_tbl = RoundedCard(
+            self.tab_actividades, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=16, pady=12,
+            expand_body=True
+        )
         card_tbl.pack(fill=BOTH, expand=True)
 
         cols = ("actividad", "fecha", "lugar", "estado", "cupo", "asignados", "ocupacion")
-        tbl = tb.Treeview(card_tbl, columns=cols, show="headings", height=5, bootstyle="danger")
+        tbl = tb.Treeview(card_tbl.body, columns=cols, show="headings", height=5, style="Rep.Treeview")
         headers = {
             "actividad": ("Actividad", 200),
             "fecha": ("Fecha", 95),
@@ -408,7 +549,11 @@ class ReportesRendimientoView(tb.Frame):
             tbl.heading(c, text=txt)
             tbl.column(c, width=w, anchor="center" if c not in ("actividad", "lugar") else "w")
 
-        for a in act_ocup:
+        tbl.tag_configure("par", background=PALETTE["blanco"])
+        tbl.tag_configure("impar", background="#F9FAFB")
+
+        for idx, a in enumerate(act_ocup):
+            tag = "par" if idx % 2 == 0 else "impar"
             tbl.insert("", tk.END, values=(
                 a["actividad"],
                 str(a["fecha"]),
@@ -417,7 +562,7 @@ class ReportesRendimientoView(tb.Frame):
                 a["cupo_maximo"],
                 a["inscritos"],
                 f"{a['porcentaje_ocupacion']}%"
-            ))
+            ), tags=(tag,))
         tbl.pack(fill=BOTH, expand=True)
 
     # =========================================================================
@@ -431,50 +576,57 @@ class ReportesRendimientoView(tb.Frame):
         don_tipo = self.paquete_actual["don_tipo"]
         don_insumos = self.paquete_actual["don_insumos"]
 
-        # Rejilla 2x2 de gráficos para cubrir todas las relaciones de donaciones
-        grid_charts = tk.Frame(self.tab_donaciones, bg="#FFF5F5")
+        grid_charts = tk.Frame(self.tab_donaciones, bg=PALETTE["plomo_fondo"])
         grid_charts.pack(fill=BOTH, expand=True)
         grid_charts.columnconfigure(0, weight=50)
         grid_charts.columnconfigure(1, weight=50)
         grid_charts.rowconfigure(0, weight=50)
         grid_charts.rowconfigure(1, weight=50)
 
-        # Gráfico 1: Donaciones Monetarias por Tiempo
-        c1 = tk.Frame(grid_charts, bg="#FFFFFF", padx=6, pady=6)
-        c1.grid(row=0, column=0, sticky="nsew", padx=(0, 5), pady=(0, 5))
+        c1 = RoundedCard(
+            grid_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=8, pady=8, expand_body=True
+        )
+        c1.grid(row=0, column=0, sticky="nsew", padx=(0, 6), pady=(0, 6))
         self._grafico_linea_tiempo(
-            c1,
+            c1.body,
             [x["periodo"] for x in don_tiempo],
             [x["total_monto"] for x in don_tiempo],
             "Recaudación Monetaria por Tiempo (Bs.)",
             "Monto (Bs.)"
         )
 
-        # Gráfico 2: Recaudación por Método de Pago (Pastel)
-        c2 = tk.Frame(grid_charts, bg="#FFFFFF", padx=6, pady=6)
-        c2.grid(row=0, column=1, sticky="nsew", padx=(5, 0), pady=(0, 5))
+        c2 = RoundedCard(
+            grid_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=8, pady=8, expand_body=True
+        )
+        c2.grid(row=0, column=1, sticky="nsew", padx=(6, 0), pady=(0, 6))
         self._grafico_pastel(
-            c2,
+            c2.body,
             [x["metodo"] for x in don_metodo],
             [x["total_monto"] for x in don_metodo],
             "Recaudación por Método de Pago (Bs.)"
         )
 
-        # Gráfico 3: Proporción DINERO vs. MATERIAL (Pastel)
-        c3 = tk.Frame(grid_charts, bg="#FFFFFF", padx=6, pady=6)
-        c3.grid(row=1, column=0, sticky="nsew", padx=(0, 5), pady=(5, 0))
+        c3 = RoundedCard(
+            grid_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=8, pady=8, expand_body=True
+        )
+        c3.grid(row=1, column=0, sticky="nsew", padx=(0, 6), pady=(6, 0))
         self._grafico_pastel(
-            c3,
+            c3.body,
             [x["tipo"] for x in don_tipo],
             [x["cantidad"] for x in don_tipo],
             "Proporción de Donaciones: Dinero vs. Material"
         )
 
-        # Gráfico 4: Cantidad de Insumos Donados en Especie (Barras)
-        c4 = tk.Frame(grid_charts, bg="#FFFFFF", padx=6, pady=6)
-        c4.grid(row=1, column=1, sticky="nsew", padx=(5, 0), pady=(5, 0))
+        c4 = RoundedCard(
+            grid_charts, radius=18, bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"], padx=8, pady=8, expand_body=True
+        )
+        c4.grid(row=1, column=1, sticky="nsew", padx=(6, 0), pady=(6, 0))
         self._grafico_barras_horizontales(
-            c4,
+            c4.body,
             [f"{x['insumo']} ({x['unidad_medida']})" for x in don_insumos],
             [x["total_cantidad"] for x in don_insumos],
             "Insumos Recibidos por Categoría",

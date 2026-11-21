@@ -1,3 +1,4 @@
+import re
 from datetime import date, time
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
@@ -5,6 +6,8 @@ from models.actividad_model import ActividadModel
 
 
 class ActividadController:
+    _RE_RANGO_OBS = re.compile(r"^\[(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})\]\s*(.*)$", re.DOTALL)
+
     def __init__(self):
         self.model = ActividadModel()
 
@@ -34,6 +37,70 @@ class ActividadController:
     @staticmethod
     def generar_cupos_validos() -> list[str]:
         return [str(c) for c in range(3, 16)]
+
+    # =========================================================================
+    # UTILIDADES DE HORARIO DE ASISTENCIA (LLEGADA / PARTIDA)
+    # =========================================================================
+
+    @staticmethod
+    def _a_minutos(hora_str: str) -> int:
+        h, m = map(int, hora_str.strip()[:5].split(":"))
+        return h * 60 + m
+
+    @staticmethod
+    def _a_hora_str(minutos: int) -> str:
+        return f"{minutos // 60:02d}:{minutos % 60:02d}"
+
+    @classmethod
+    def generar_horas_llegada(cls, hora_inicio_str: str, hora_fin_str: str) -> list[str]:
+        """Genera horas posibles de llegada en bloques de 15 min dentro de la actividad."""
+        try:
+            ini = cls._a_minutos(hora_inicio_str)
+            fin = cls._a_minutos(hora_fin_str)
+        except Exception:
+            return []
+        if fin <= ini:
+            return []
+        return [cls._a_hora_str(m) for m in range(ini, fin, 15)]
+
+    @classmethod
+    def generar_horas_partida(cls, hora_llegada_str: str, hora_fin_str: str) -> list[str]:
+        """Genera horas posibles de partida desde (llegada + 15 min) hasta hora_fin."""
+        try:
+            llegada = cls._a_minutos(hora_llegada_str)
+            fin = cls._a_minutos(hora_fin_str)
+        except Exception:
+            return []
+        if fin <= llegada:
+            return []
+        return [cls._a_hora_str(m) for m in range(llegada + 15, fin + 1, 15)]
+
+    @classmethod
+    def calcular_horas_rango(cls, hora_llegada_str: str, hora_partida_str: str) -> float:
+        """Calcula las horas decimales exactas entre llegada y partida."""
+        try:
+            ini = cls._a_minutos(hora_llegada_str)
+            fin = cls._a_minutos(hora_partida_str)
+            if fin <= ini:
+                return 0.0
+            return round((fin - ini) / 60.0, 2)
+        except Exception:
+            return 0.0
+
+    @classmethod
+    def extraer_horario_observaciones(cls, obs: str | None) -> tuple[str | None, str | None, str]:
+        """Separa el prefijo '[HH:MM - HH:MM]' del texto libre de observaciones."""
+        texto = (obs or "").strip()
+        if not texto:
+            return None, None, ""
+        m = cls._RE_RANGO_OBS.match(texto)
+        if m:
+            return m.group(1), m.group(2), m.group(3).strip()
+        return None, None, texto
+
+    # =========================================================================
+    # GESTIÓN DE ACTIVIDADES
+    # =========================================================================
 
     def _validar_datos_actividad(self, datos: dict) -> tuple[bool, str, dict | None]:
         nombre = datos.get("nombre", "").strip()
@@ -111,6 +178,10 @@ class ActividadController:
             return False, str(e)
 
     def obtener_actividades(self, filtro_estado: str = "Todas") -> list[dict]:
+        try:
+            self.model.sincronizar_estados_por_horario()
+        except Exception:
+            pass
         return self.model.listar_actividades(filtro_estado)
 
     def cancelar_actividad(self, actividad: dict) -> tuple[bool, str]:
@@ -138,6 +209,10 @@ class ActividadController:
             return True, f"La actividad '{actividad['nombre']}' ha sido restablecida."
         except Exception as e:
             return False, str(e)
+
+    # =========================================================================
+    # ASIGNACIÓN DE VOLUNTARIOS
+    # =========================================================================
 
     def obtener_voluntarios_admitidos(self, busqueda: str = "") -> list[dict]:
         return self.model.listar_voluntarios_disponibles(busqueda)
@@ -171,36 +246,70 @@ class ActividadController:
         except Exception as e:
             return False, str(e)
 
+    # =========================================================================
+    # CONTROL DE ASISTENCIA (SOLO ACTIVIDADES FINALIZADAS + LLEGADA/PARTIDA)
+    # =========================================================================
+
     def guardar_asistencia(
         self,
+        actividad: dict,
         asignacion: dict,
         asistio: bool,
-        horas_str: str,
+        hora_llegada: str,
+        hora_partida: str,
         observaciones: str
     ) -> tuple[bool, str]:
+        if not actividad:
+            return False, "Selecciona una actividad."
+        if actividad.get("estado") != "Finalizada":
+            return (
+                False,
+                f"No se puede registrar ni modificar la asistencia porque la actividad se encuentra "
+                f"en estado '{actividad.get('estado')}'. Espera a que finalice."
+            )
         if not asignacion:
-            return False, "Selecciona un voluntario de la lista de asistencia."
+            return False, "Selecciona un voluntario de la planilla."
+
+        obs_limpia = (observaciones or "").strip()
 
         if not asistio:
             horas = 0.0
+            obs_final = obs_limpia or None
         else:
-            try:
-                horas = round(float(horas_str.replace(",", ".")), 2)
-                if horas <= 0:
-                    return False, "Si el voluntario asistió, las horas cumplidas deben ser mayores a 0."
-            except ValueError:
-                return False, "Ingresa un número válido para las horas cumplidas (ej. 4 o 3.5)."
+            llegadas_validas = self.generar_horas_llegada(
+                actividad["hora_inicio_str"],
+                actividad["hora_fin_str"]
+            )
+            if hora_llegada not in llegadas_validas:
+                return False, "Selecciona una hora de llegada válida dentro del horario de la actividad."
 
-        obs = observaciones.strip() or None
+            partidas_validas = self.generar_horas_partida(
+                hora_llegada,
+                actividad["hora_fin_str"]
+            )
+            if hora_partida not in partidas_validas:
+                return False, "La hora de partida debe ser posterior a la llegada y no exceder el fin de la actividad."
+
+            horas = self.calcular_horas_rango(hora_llegada, hora_partida)
+            duracion_max = round(float(actividad["duracion_horas"]), 2)
+            if horas <= 0 or horas > duracion_max:
+                return False, f"Las horas calculadas ({horas} hrs) exceden la duración de la actividad ({duracion_max} hrs)."
+
+            prefijo = f"[{hora_llegada} - {hora_partida}]"
+            obs_final = f"{prefijo} {obs_limpia}".strip()
 
         try:
             self.model.registrar_o_actualizar_asistencia(
                 id_asignacion=asignacion["id_asignacion"],
                 asistio=asistio,
                 horas_cumplidas=horas,
-                observaciones=obs
+                observaciones=obs_final
             )
-            estado_txt = f"Asistió ({horas} hrs)" if asistio else "Inasistencia (0 hrs)"
+            estado_txt = (
+                f"Asistió ({hora_llegada} a {hora_partida} = {horas:.2f} hrs)"
+                if asistio
+                else "Inasistencia (0.00 hrs)"
+            )
             return True, f"Asistencia guardada para {asignacion['nombre_completo']}: {estado_txt}."
         except Exception as e:
             return False, str(e)
@@ -256,18 +365,18 @@ class ActividadController:
             perfil = paquete["perfil"]
             resumen = paquete["resumen"]
 
-            fill_header = PatternFill(start_color="7F1D1D", end_color="7F1D1D", fill_type="solid")
+            fill_header = PatternFill(start_color="DA291C", end_color="DA291C", fill_type="solid")
             font_header = Font(color="FFFFFF", bold=True, size=11)
 
             ws["A1"] = "Save the Children Bolivia — Constancia de Horas de Voluntariado"
-            ws["A1"].font = Font(color="7F1D1D", bold=True, size=14)
+            ws["A1"].font = Font(color="DA291C", bold=True, size=14)
             ws["A2"] = f"Voluntario: {perfil['nombre_completo']}  |  CI: {perfil['ci']}"
             ws["A2"].font = Font(bold=True, size=10)
             ws["A3"] = (
                 f"Total Horas Cumplidas: {resumen['total_horas']} hrs  |  "
                 f"Asistencias: {resumen['asistencias']}  |  Cumplimiento: {resumen['cumplimiento']}%"
             )
-            ws["A3"].font = Font(italic=True, color="555555", size=10)
+            ws["A3"].font = Font(italic=True, color="4B5563", size=10)
 
             encabezados = ["Fecha", "Actividad", "Horario", "Lugar", "Asistencia", "Horas Cumplidas", "Observaciones"]
             fila_hdr = 5

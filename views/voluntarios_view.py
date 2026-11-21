@@ -1,529 +1,764 @@
-import calendar
 from datetime import date
 import tkinter as tk
 from tkinter import messagebox
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from controllers.voluntario_controller import VoluntarioController
+from views.ui_components import PALETTE, RoundedCard, InputValidators
 
 
-class InscripcionVoluntarioView(tb.Frame):
-    """Vista limpia y profesional para la inscripción de postulantes (Recepcionista y Admin)."""
-
-    MESES = [
-        ("01 - Enero", 1),
-        ("02 - Febrero", 2),
-        ("03 - Marzo", 3),
-        ("04 - Abril", 4),
-        ("05 - Mayo", 5),
-        ("06 - Junio", 6),
-        ("07 - Julio", 7),
-        ("08 - Agosto", 8),
-        ("09 - Septiembre", 9),
-        ("10 - Octubre", 10),
-        ("11 - Noviembre", 11),
-        ("12 - Diciembre", 12),
-    ]
+class InscripcionVoluntarioView(tk.Frame):
+    """Pestaña de Inscripción de Postulantes con filtros de teclado y cálculo automático de edad."""
 
     def __init__(self, master, sesion: dict):
-        super().__init__(master)
+        super().__init__(master, bg=PALETTE["plomo_fondo"])
         self.sesion = sesion
         self.controller = VoluntarioController()
-        self.meses_map = dict(self.MESES)
-        self.cols_vol = self.controller.model.obtener_columnas_voluntario()
-        self.tiene_direccion = "direccion" in self.cols_vol
 
         self.pack(fill=BOTH, expand=True)
         self._construir_ui()
+        self._actualizar_edad_preview()
 
     def _construir_ui(self):
-        header = tk.Frame(self, bg="#FFF5F5")
+        # =====================================================================
+        # 1. ENCABEZADO (20 pt)
+        # =====================================================================
+        header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         header.pack(fill="x", pady=(0, 16))
+
+        tk.Label(
+            header,
+            text="SAVE THE CHILDREN BOLIVIA  •  RECLUTAMIENTO",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["rojo"]
+        ).pack(anchor="w")
 
         tk.Label(
             header,
             text="Inscripción de Postulante a Voluntariado",
             font=("Segoe UI", 20, "bold"),
-            bg="#FFF5F5",
-            fg="#7F1D1D"
-        ).pack(anchor="w")
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(2, 2))
 
         tk.Label(
             header,
-            text="Completa la ficha de postulación. Requisitos: edad entre 18 y 60 años y Carnet de Identidad vigente.",
+            text="Registra nuevos aspirantes validando identidad, edad reglamentaria (18 a 60 años) y datos de contacto.",
             font=("Segoe UI", 10),
-            bg="#FFF5F5",
-            fg="#64748B"
-        ).pack(anchor="w", pady=(3, 0))
-
-        card = tk.Frame(self, bg="#FFFFFF", padx=28, pady=24)
-        card.pack(fill="x")
-
-        # --- SECCIÓN 1: DATOS DE IDENTIFICACIÓN ---
-        self._titulo_seccion(card, "1. Datos de Identificación Personal")
-
-        grid_id = tk.Frame(card, bg="#FFFFFF")
-        grid_id.pack(fill="x", pady=(0, 16))
-        for c in range(2):
-            grid_id.columnconfigure(c, weight=1, uniform="sec1")
-
-        tk.Label(grid_id, text="Carnet de Identidad (CI) *", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=0, column=0, sticky="w", padx=6)
-        self.entry_ci = tb.Entry(grid_id, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_ci.grid(row=1, column=0, sticky="ew", padx=6, ipady=4, pady=(2, 10))
-
-        tk.Label(grid_id, text="Nombres *", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=0, column=1, sticky="w", padx=6)
-        self.entry_nombres = tb.Entry(grid_id, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_nombres.grid(row=1, column=1, sticky="ew", padx=6, ipady=4, pady=(2, 10))
-
-        tk.Label(grid_id, text="Apellido Paterno *", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=2, column=0, sticky="w", padx=6)
-        self.entry_ap_pat = tb.Entry(grid_id, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_ap_pat.grid(row=3, column=0, sticky="ew", padx=6, ipady=4)
-
-        tk.Label(grid_id, text="Apellido Materno (Opcional)", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=2, column=1, sticky="w", padx=6)
-        self.entry_ap_mat = tb.Entry(grid_id, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_ap_mat.grid(row=3, column=1, sticky="ew", padx=6, ipady=4)
-
-        # --- SECCIÓN 2: FECHA DE NACIMIENTO (3 LISTAS: DÍA / MES / AÑO) ---
-        self._titulo_seccion(card, "2. Fecha de Nacimiento (Edad permitida: 18 a 60 años) *")
-
-        fecha_box = tk.Frame(card, bg="#FFF5F5", padx=14, pady=12)
-        fecha_box.pack(fill="x", padx=6, pady=(0, 18))
-
-        hoy = date.today()
-        anios_validos = [str(y) for y in range(hoy.year - 18, hoy.year - 62, -1)]
-        meses_labels = [m[0] for m in self.MESES]
-        dias_iniciales = [f"{d:02d}" for d in range(1, 32)]
-
-        tk.Label(fecha_box, text="Día:", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(side="left", padx=(0, 6))
-        self.combo_dia = tb.Combobox(fecha_box, values=dias_iniciales, state="readonly", width=6, font=("Segoe UI", 10), bootstyle="danger")
-        self.combo_dia.pack(side="left", padx=(0, 16))
-        self.combo_dia.bind("<<ComboboxSelected>>", lambda e: self._actualizar_preview_edad())
-
-        tk.Label(fecha_box, text="Mes:", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(side="left", padx=(0, 6))
-        self.combo_mes = tb.Combobox(fecha_box, values=meses_labels, state="readonly", width=16, font=("Segoe UI", 10), bootstyle="danger")
-        self.combo_mes.pack(side="left", padx=(0, 16))
-        self.combo_mes.bind("<<ComboboxSelected>>", lambda e: self._al_cambiar_mes_anio())
-
-        tk.Label(fecha_box, text="Año:", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(side="left", padx=(0, 6))
-        self.combo_anio = tb.Combobox(fecha_box, values=anios_validos, state="readonly", width=8, font=("Segoe UI", 10), bootstyle="danger")
-        self.combo_anio.pack(side="left", padx=(0, 18))
-        self.combo_anio.bind("<<ComboboxSelected>>", lambda e: self._al_cambiar_mes_anio())
-
-        self.lbl_edad_preview = tk.Label(
-            fecha_box,
-            text="",
-            font=("Segoe UI", 9, "bold"),
-            bg="#FFF5F5",
-            fg="#15803D"
-        )
-        self.lbl_edad_preview.pack(side="right")
-
-        self._restablecer_fecha_defecto()
-
-        # --- SECCIÓN 3: INFORMACIÓN DE CONTACTO ---
-        self._titulo_seccion(card, "3. Información de Contacto")
-
-        grid_con = tk.Frame(card, bg="#FFFFFF")
-        grid_con.pack(fill="x", pady=(0, 18))
-        grid_con.columnconfigure(0, weight=1, uniform="sec3")
-        grid_con.columnconfigure(1, weight=1, uniform="sec3")
-
-        tk.Label(grid_con, text="Teléfono / Celular", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=0, column=0, sticky="w", padx=6)
-        self.entry_tel = tb.Entry(grid_con, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_tel.grid(row=1, column=0, sticky="ew", padx=6, ipady=4, pady=(2, 10))
-
-        tk.Label(grid_con, text="Correo Electrónico", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=0, column=1, sticky="w", padx=6)
-        self.entry_correo = tb.Entry(grid_con, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_correo.grid(row=1, column=1, sticky="ew", padx=6, ipady=4, pady=(2, 10))
-
-        self.entry_dir = None
-        if self.tiene_direccion:
-            tk.Label(grid_con, text="Dirección / Zona de Residencia", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=2, column=0, columnspan=2, sticky="w", padx=6)
-            self.entry_dir = tb.Entry(grid_con, font=("Segoe UI", 10), bootstyle="danger")
-            self.entry_dir.grid(row=3, column=0, columnspan=2, sticky="ew", padx=6, ipady=4)
-
-        # Barra de botones
-        tk.Frame(card, bg="#E2E8F0", height=1).pack(fill="x", padx=6, pady=(4, 14))
-        btns = tk.Frame(card, bg="#FFFFFF")
-        btns.pack(fill="x", padx=6)
-
-        tb.Button(
-            btns,
-            text="Limpiar Formulario",
-            bootstyle="secondary-outline",
-            command=self._limpiar
-        ).pack(side="left", ipady=5, ipadx=10)
-
-        tb.Button(
-            btns,
-            text="✓ Registrar Postulante",
-            bootstyle="danger",
-            command=self._guardar
-        ).pack(side="right", ipady=6, ipadx=20)
-
-    def _titulo_seccion(self, parent, texto: str):
-        frame_sec = tk.Frame(parent, bg="#FFFFFF")
-        frame_sec.pack(fill="x", padx=6, pady=(4, 8))
-        tk.Label(
-            frame_sec,
-            text=texto,
-            font=("Segoe UI", 10, "bold"),
-            bg="#FFFFFF",
-            fg="#991B1B"
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["plomo_texto"]
         ).pack(anchor="w")
 
-    def _restablecer_fecha_defecto(self):
-        hoy = date.today()
-        anio_def = str(hoy.year - 22)
-        self.combo_anio.set(anio_def)
-        self.combo_mes.set(self.MESES[0][0])
-        self._al_cambiar_mes_anio()
-        self.combo_dia.set("15")
-        self._actualizar_preview_edad()
+        # =====================================================================
+        # 2. CONTENEDOR PRINCIPAL: FORMULARIO CURVO + PANEL LATERAL DE REGLAS
+        # =====================================================================
+        cuerpo = tk.Frame(self, bg=PALETTE["plomo_fondo"])
+        cuerpo.pack(fill=BOTH, expand=True)
+        cuerpo.columnconfigure(0, weight=3)
+        cuerpo.columnconfigure(1, weight=1)
+        cuerpo.rowconfigure(0, weight=1)
 
-    def _al_cambiar_mes_anio(self):
+        # --- TARJETA IZQUIERDA: FORMULARIO DE INSCRIPCIÓN ---
+        card_form = RoundedCard(
+            cuerpo,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=26,
+            pady=22,
+            expand_body=True
+        )
+        card_form.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+
+        b = card_form.body
+
+        tk.Label(
+            b,
+            text="Datos Personales y de Contacto del Postulante",
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            b,
+            text="Los campos marcados con (*) son obligatorios. Cada casilla restringe el tipo de carácter permitido.",
+            font=("Segoe UI", 9),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["plomo_texto"]
+        ).pack(anchor="w", pady=(0, 14))
+
+        tk.Frame(b, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(0, 16))
+
+        grid = tk.Frame(b, bg=PALETTE["blanco"])
+        grid.pack(fill="x")
+        grid.columnconfigure(0, weight=1, uniform="form_col")
+        grid.columnconfigure(1, weight=1, uniform="form_col")
+
+        # Fila 0: CI (Solo Números) | Nombres (Solo Letras)
+        self.entry_ci = self._crear_campo(
+            grid, row=0, col=0,
+            etiqueta="Carnet de Identidad (CI) *  [Solo números]",
+            validacion="enteros"
+        )
+        self.entry_nombres = self._crear_campo(
+            grid, row=0, col=1,
+            etiqueta="Nombres *  [Solo letras]",
+            validacion="letras"
+        )
+
+        # Fila 1: Apellido Paterno (Solo Letras) | Apellido Materno (Solo Letras)
+        self.entry_ap_paterno = self._crear_campo(
+            grid, row=1, col=0,
+            etiqueta="Apellido Paterno *  [Solo letras]",
+            validacion="letras"
+        )
+        self.entry_ap_materno = self._crear_campo(
+            grid, row=1, col=1,
+            etiqueta="Apellido Materno (Opcional)  [Solo letras]",
+            validacion="letras"
+        )
+
+        # Fila 2: Fecha de Nacimiento + Edad Calculada en Vivo | Teléfono (Solo Números)
+        celda_fecha = tk.Frame(grid, bg=PALETTE["blanco"])
+        celda_fecha.grid(row=2, column=0, sticky="ew", padx=(0, 12), pady=(0, 14))
+
+        tk.Label(
+            celda_fecha,
+            text="Fecha de Nacimiento *  (AAAA-MM-DD)",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            anchor="w"
+        ).pack(fill="x", pady=(0, 4))
+
+        fecha_row = tk.Frame(celda_fecha, bg=PALETTE["blanco"])
+        fecha_row.pack(fill="x")
+
+        fecha_defecto = date.today().replace(year=date.today().year - 22)
+        self.date_nac = tb.DateEntry(
+            fecha_row,
+            dateformat="%Y-%m-%d",
+            startdate=fecha_defecto,
+            bootstyle="danger",
+            width=15
+        )
+        self.date_nac.pack(side="left", ipady=2)
+
+        self.lbl_edad_calc = tk.Label(
+            fecha_row,
+            text="Edad: -- años",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            padx=12,
+            pady=6
+        )
+        self.lbl_edad_calc.pack(side="left", padx=(10, 0), fill="x", expand=True)
+
+        # Eventos para recalcular la edad automáticamente al escribir o elegir fecha
+        self.date_nac.entry.bind("<KeyRelease>", self._actualizar_edad_preview)
+        self.date_nac.entry.bind("<FocusOut>", self._actualizar_edad_preview)
+        self.date_nac.bind("<<DateEntrySelected>>", self._actualizar_edad_preview)
+
+        self.entry_telefono = self._crear_campo(
+            grid, row=2, col=1,
+            etiqueta="Teléfono / Celular  [Solo números]",
+            validacion="enteros"
+        )
+
+        # Fila 3: Correo Electrónico | Dirección / Zona
+        self.entry_correo = self._crear_campo(
+            grid, row=3, col=0,
+            etiqueta="Correo Electrónico (Opcional)",
+            validacion=None
+        )
+        self.entry_direccion = self._crear_campo(
+            grid, row=3, col=1,
+            etiqueta="Dirección / Zona de Residencia (Opcional)",
+            validacion=None
+        )
+
+        # Barra inferior de botones
+        tk.Frame(b, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(10, 16))
+
+        btn_bar = tk.Frame(b, bg=PALETTE["blanco"])
+        btn_bar.pack(fill="x")
+
+        btn_limpiar = tk.Button(
+            btn_bar,
+            text="Limpiar Campos",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["plomo_borde"],
+            bd=0,
+            padx=18,
+            pady=10,
+            cursor="hand2",
+            command=self._limpiar_formulario
+        )
+        btn_limpiar.pack(side="left")
+
+        btn_guardar = tk.Button(
+            btn_bar,
+            text="✓  Registrar Postulante",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=24,
+            pady=10,
+            cursor="hand2",
+            command=self._guardar_postulante
+        )
+        btn_guardar.pack(side="right")
+        btn_guardar.bind("<Enter>", lambda _e: btn_guardar.config(bg=PALETTE["rojo_hover"]))
+        btn_guardar.bind("<Leave>", lambda _e: btn_guardar.config(bg=PALETTE["rojo"]))
+
+        # --- TARJETA DERECHA: REQUISITOS Y FLUJO DE ADMISIÓN ---
+        card_info = RoundedCard(
+            cuerpo,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=20,
+            pady=22,
+            expand_body=True
+        )
+        card_info.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
+
+        bi = card_info.body
+
+        tk.Frame(bi, bg=PALETTE["rojo"], height=4).pack(fill="x", pady=(0, 12))
+
+        tk.Label(
+            bi,
+            text="Requisitos de Inscripción",
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            anchor="w"
+        ).pack(fill="x", pady=(0, 10))
+
+        reglas = [
+            ("Rango de Edad", "El postulante debe tener entre 18 y 60 años cumplidos a la fecha."),
+            ("Carnet Único", "No se permiten dos registros con el mismo número de CI."),
+            ("Validación de Campos", "Nombres y apellidos aceptan solo letras; CI y teléfono aceptan solo números."),
+            ("Siguiente Paso", "Tras inscribirlo, pasará a 'Admisión Voluntarios' para habilitar su cuenta.")
+        ]
+
+        for titulo_r, desc_r in reglas:
+            box = tk.Frame(bi, bg=PALETTE["plomo_fondo"], padx=12, pady=9)
+            box.pack(fill="x", pady=(0, 8))
+
+            tk.Label(
+                box,
+                text=f"• {titulo_r}",
+                font=("Segoe UI", 9, "bold"),
+                bg=PALETTE["plomo_fondo"],
+                fg=PALETTE["negro"],
+                anchor="w"
+            ).pack(fill="x")
+
+            tk.Label(
+                box,
+                text=desc_r,
+                font=("Segoe UI", 8),
+                bg=PALETTE["plomo_fondo"],
+                fg=PALETTE["plomo_texto"],
+                wraplength=230,
+                justify="left",
+                anchor="w"
+            ).pack(fill="x", pady=(2, 0))
+
+    def _crear_campo(self, parent, row: int, col: int, etiqueta: str, validacion: str | None):
+        padx = (0, 12) if col == 0 else (12, 0)
+        celda = tk.Frame(parent, bg=PALETTE["blanco"])
+        celda.grid(row=row, column=col, sticky="ew", padx=padx, pady=(0, 14))
+
+        tk.Label(
+            celda,
+            text=etiqueta,
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            anchor="w"
+        ).pack(fill="x", pady=(0, 4))
+
+        entry = tb.Entry(celda, font=("Segoe UI", 10))
+        entry.pack(fill="x", ipady=4)
+
+        if validacion:
+            InputValidators.aplicar(entry, validacion)
+
+        return entry
+
+    def _actualizar_edad_preview(self, _event=None):
+        texto_fecha = self.date_nac.entry.get().strip()
         try:
-            anio = int(self.combo_anio.get())
-            mes_num = self.meses_map.get(self.combo_mes.get(), 1)
-            max_dias = calendar.monthrange(anio, mes_num)[1]
+            fecha_nac = self.controller.parsear_fecha(texto_fecha)
+            edad = self.controller.calcular_edad(fecha_nac)
+            if 18 <= edad <= 60:
+                self.lbl_edad_calc.config(
+                    text=f"✓ {edad} años (Apto)",
+                    bg="#DCFCE7",
+                    fg="#15803D"
+                )
+            else:
+                self.lbl_edad_calc.config(
+                    text=f"✕ {edad} años (Fuera de rango)",
+                    bg=PALETTE["rojo_suave"],
+                    fg=PALETTE["rojo"]
+                )
         except Exception:
-            max_dias = 31
+            self.lbl_edad_calc.config(
+                text="Fecha incompleta",
+                bg=PALETTE["plomo_fondo"],
+                fg=PALETTE["plomo_texto"]
+            )
 
-        nuevos_dias = [f"{d:02d}" for d in range(1, max_dias + 1)]
-        self.combo_dia["values"] = nuevos_dias
+    def _limpiar_formulario(self):
+        for entry in (
+            self.entry_ci,
+            self.entry_nombres,
+            self.entry_ap_paterno,
+            self.entry_ap_materno,
+            self.entry_telefono,
+            self.entry_correo,
+            self.entry_direccion
+        ):
+            entry.delete(0, tk.END)
 
-        dia_actual = self.combo_dia.get()
-        if not dia_actual or int(dia_actual) > max_dias:
-            self.combo_dia.set(f"{max_dias:02d}")
+        fecha_defecto = date.today().replace(year=date.today().year - 22)
+        self.date_nac.entry.delete(0, tk.END)
+        self.date_nac.entry.insert(0, fecha_defecto.strftime("%Y-%m-%d"))
+        self._actualizar_edad_preview()
+        self.entry_ci.focus_set()
 
-        self._actualizar_preview_edad()
-
-    def _actualizar_preview_edad(self):
-        anio = self.combo_anio.get()
-        mes_num = self.meses_map.get(self.combo_mes.get(), 0)
-        dia = self.combo_dia.get()
-
-        ok, _msg, _fecha, edad = self.controller.validar_fecha_nacimiento_partes(anio, mes_num, dia)
-        if edad is None:
-            self.lbl_edad_preview.config(text="", fg="#64748B")
-        elif ok:
-            self.lbl_edad_preview.config(text=f"Edad: {edad} años  ✓  (Apto para voluntariado)", fg="#15803D")
-        else:
-            self.lbl_edad_preview.config(text=f"Edad: {edad} años  ✕  (Fuera de rango: 18 a 60 años)", fg="#DC2626")
-
-    def _limpiar(self):
-        campos = [self.entry_ci, self.entry_nombres, self.entry_ap_pat, self.entry_ap_mat, self.entry_tel, self.entry_correo]
-        if self.entry_dir is not None:
-            campos.append(self.entry_dir)
-        for w in campos:
-            w.delete(0, tk.END)
-        self._restablecer_fecha_defecto()
-
-    def _guardar(self):
+    def _guardar_postulante(self):
         datos = {
             "ci": self.entry_ci.get(),
             "nombres": self.entry_nombres.get(),
-            "apellido_paterno": self.entry_ap_pat.get(),
-            "apellido_materno": self.entry_ap_mat.get(),
-            "anio": self.combo_anio.get(),
-            "mes_num": self.meses_map.get(self.combo_mes.get(), 0),
-            "dia": self.combo_dia.get(),
-            "telefono": self.entry_tel.get(),
+            "apellido_paterno": self.entry_ap_paterno.get(),
+            "apellido_materno": self.entry_ap_materno.get(),
+            "fecha_nacimiento": self.date_nac.entry.get(),
+            "telefono": self.entry_telefono.get(),
             "correo": self.entry_correo.get(),
-            "direccion": self.entry_dir.get() if self.entry_dir is not None else ""
+            "direccion": self.entry_direccion.get(),
+            "id_usuario_registra": self.sesion.get("id_usuario")
         }
-        exito, msg = self.controller.inscribir_postulante(datos, self.sesion["id_usuario"])
-        if not exito:
-            messagebox.showwarning("Validación de Postulante", msg)
-            return
 
-        messagebox.showinfo("Postulante Registrado", msg)
-        self._limpiar()
+        exito, mensaje = self.controller.registrar_postulante(datos)
+        if exito:
+            messagebox.showinfo("Inscripción Exitosa", mensaje)
+            self._limpiar_formulario()
+        else:
+            messagebox.showwarning("Validación de Inscripción", mensaje)
 
 
-class AdmisionVoluntariosView(tb.Frame):
-    """Vista profesional y organizada para evaluación, admisión y trazabilidad de voluntarios."""
+class AdmisionVoluntariosView(tk.Frame):
+    """Pestaña de Admisión y Control de Voluntarios con tabla resaltada y curvas."""
 
     def __init__(self, master, sesion: dict):
-        super().__init__(master)
+        super().__init__(master, bg=PALETTE["plomo_fondo"])
         self.sesion = sesion
         self.controller = VoluntarioController()
         self.voluntarios_cache = {}
-        self.seleccionado = None
-        self.tiene_direccion = "direccion" in self.controller.model.obtener_columnas_voluntario()
 
         self.pack(fill=BOTH, expand=True)
+        self._configurar_estilos_tabla()
         self._construir_ui()
-        self._cargar_tabla()
+        self._cargar_voluntarios()
+
+    def _configurar_estilos_tabla(self):
+        style = tb.Style()
+        style.configure(
+            "Vol.Treeview",
+            background=PALETTE["blanco"],
+            foreground=PALETTE["negro"],
+            fieldbackground=PALETTE["blanco"],
+            rowheight=32,
+            borderwidth=0,
+            font=("Segoe UI", 9)
+        )
+        style.configure(
+            "Vol.Treeview.Heading",
+            background=PALETTE["plomo_fondo"],
+            foreground=PALETTE["negro"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 9, "bold"),
+            padding=(8, 8)
+        )
+        style.map(
+            "Vol.Treeview.Heading",
+            background=[("active", PALETTE["plomo_borde"])]
+        )
+        style.map(
+            "Vol.Treeview",
+            background=[("selected", PALETTE["rojo_suave"])],
+            foreground=[("selected", PALETTE["negro"])]
+        )
 
     def _construir_ui(self):
-        header = tk.Frame(self, bg="#FFF5F5")
-        header.pack(fill="x", pady=(0, 12))
+        # =====================================================================
+        # 1. ENCABEZADO (20 pt)
+        # =====================================================================
+        header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
+        header.pack(fill="x", pady=(0, 14))
+
+        izq = tk.Frame(header, bg=PALETTE["plomo_fondo"])
+        izq.pack(side="left", fill="x", expand=True)
 
         tk.Label(
-            header,
-            text="Admisión y Control de Voluntarios",
-            font=("Segoe UI", 20, "bold"),
-            bg="#FFF5F5",
-            fg="#7F1D1D"
+            izq,
+            text="SAVE THE CHILDREN BOLIVIA  •  TALENTO HUMANO",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["rojo"]
         ).pack(anchor="w")
 
         tk.Label(
-            header,
-            text="Selecciona un postulante o voluntario para revisar su ficha completa, aprobar su ingreso o gestionar su estado.",
+            izq,
+            text="Admisión y Control de Voluntarios",
+            font=("Segoe UI", 20, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(2, 2))
+
+        tk.Label(
+            izq,
+            text="Evalúa postulantes, genera credenciales de acceso al portal y administra el estado de los voluntarios.",
             font=("Segoe UI", 10),
-            bg="#FFF5F5",
-            fg="#64748B"
-        ).pack(anchor="w", pady=(2, 0))
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["plomo_texto"]
+        ).pack(anchor="w")
 
-        # Barra superior de filtros y búsqueda
-        barra_filtro = tk.Frame(self, bg="#FFFFFF", padx=16, pady=10)
-        barra_filtro.pack(fill="x", pady=(0, 10))
+        btn_ref = tk.Button(
+            header,
+            text="↻  Actualizar Lista",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=16,
+            pady=8,
+            cursor="hand2",
+            command=self._cargar_voluntarios
+        )
+        btn_ref.pack(side="right", pady=6)
+        btn_ref.bind("<Enter>", lambda _e: btn_ref.config(bg=PALETTE["rojo_hover"]))
+        btn_ref.bind("<Leave>", lambda _e: btn_ref.config(bg=PALETTE["rojo"]))
 
-        tk.Label(barra_filtro, text="Filtrar por Estado:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(side="left", padx=(0, 6))
+        # =====================================================================
+        # 2. BARRA CURVA DE FILTROS Y ACCIONES DE ADMISIÓN
+        # =====================================================================
+        card_top = RoundedCard(
+            self,
+            radius=18,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=18,
+            pady=12,
+            expand_body=False
+        )
+        card_top.pack(fill="x", pady=(0, 12))
+
+        bar = card_top.body
+
+        # Filtros izquierdos
+        tk.Label(
+            bar,
+            text="Estado:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 6))
+
         self.combo_estado = tb.Combobox(
-            barra_filtro,
+            bar,
             values=["Todos", "Postulante", "Admitido", "Rechazado", "Inactivo"],
             state="readonly",
-            width=15,
+            width=14,
             bootstyle="danger"
         )
         self.combo_estado.set("Todos")
-        self.combo_estado.pack(side="left", padx=(0, 16))
-        self.combo_estado.bind("<<ComboboxSelected>>", lambda e: self._cargar_tabla())
+        self.combo_estado.pack(side="left", padx=(0, 14))
+        self.combo_estado.bind("<<ComboboxSelected>>", lambda _e: self._cargar_voluntarios())
 
-        tk.Label(barra_filtro, text="Buscar (CI o Nombre):", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(side="left", padx=(0, 6))
-        self.entry_busq = tb.Entry(barra_filtro, width=25, bootstyle="danger")
-        self.entry_busq.pack(side="left", padx=(0, 8))
-        self.entry_busq.bind("<Return>", lambda e: self._cargar_tabla())
+        tk.Label(
+            bar,
+            text="Buscar (CI o Nombre):",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 6))
 
-        tb.Button(barra_filtro, text="🔍 Buscar", bootstyle="danger", command=self._cargar_tabla).pack(side="left", padx=(0, 6))
-        tb.Button(barra_filtro, text="↻ Limpiar", bootstyle="secondary-outline", command=self._limpiar_filtros).pack(side="left")
+        self.entry_buscar = tb.Entry(bar, width=24, font=("Segoe UI", 9))
+        self.entry_buscar.pack(side="left", ipady=2)
+        self.entry_buscar.bind("<KeyRelease>", lambda _e: self._cargar_voluntarios())
 
-        # Tabla principal (SIN IDs visibles, incluye Edad)
-        card_tbl = tk.Frame(self, bg="#FFFFFF", padx=16, pady=12)
+        # Botones de acción derechos
+        btn_baja = tk.Button(
+            bar,
+            text="Desactivar",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["plomo_borde"],
+            bd=0,
+            padx=12,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self._cambiar_estado_seleccionado("Inactivo")
+        )
+        btn_baja.pack(side="right", padx=(6, 0))
+
+        btn_rechazar = tk.Button(
+            bar,
+            text="✕ Rechazar",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["rojo_suave"],
+            fg=PALETTE["rojo"],
+            activebackground=PALETTE["rojo"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=12,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self._cambiar_estado_seleccionado("Rechazado")
+        )
+        btn_rechazar.pack(side="right", padx=(6, 0))
+
+        btn_admitir = tk.Button(
+            bar,
+            text="✓ Admitir y Crear Cuenta",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=14,
+            pady=6,
+            cursor="hand2",
+            command=self._admitir_seleccionado
+        )
+        btn_admitir.pack(side="right")
+        btn_admitir.bind("<Enter>", lambda _e: btn_admitir.config(bg=PALETTE["rojo_hover"]))
+        btn_admitir.bind("<Leave>", lambda _e: btn_admitir.config(bg=PALETTE["rojo"]))
+
+        # =====================================================================
+        # 3. TARJETA CURVA PRINCIPAL CON TABLA RESALTANTE
+        # =====================================================================
+        card_tbl = RoundedCard(
+            self,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=20,
+            pady=16,
+            expand_body=True
+        )
         card_tbl.pack(fill=BOTH, expand=True, pady=(0, 12))
 
-        cols = ("ci", "nombre", "edad", "telefono", "estado", "usuario", "creado")
-        self.tabla = tb.Treeview(card_tbl, columns=cols, show="headings", height=7, bootstyle="danger")
-        cfg = {
-            "ci": ("CI", 95),
-            "nombre": ("Nombre Completo", 220),
-            "edad": ("Edad", 65),
-            "telefono": ("Teléfono", 95),
-            "estado": ("Estado", 95),
-            "usuario": ("Cuenta Usuario", 125),
-            "creado": ("Fecha Registro", 130)
-        }
-        for c, (tit, w) in cfg.items():
-            self.tabla.heading(c, text=tit)
-            self.tabla.column(c, width=w, anchor="center" if c != "nombre" else "w")
+        bt = card_tbl.body
 
-        self.tabla.pack(fill=BOTH, expand=True)
-        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar)
+        tbl_hdr = tk.Frame(bt, bg=PALETTE["blanco"])
+        tbl_hdr.pack(fill="x", pady=(0, 10))
 
-        # Ficha Inferior Estructurada (Detalle del Voluntario + Auditoría + Acciones)
-        card_ficha = tk.Frame(self, bg="#FFFFFF", padx=20, pady=16)
-        card_ficha.pack(fill="x")
+        tk.Label(
+            tbl_hdr,
+            text="📋  Listado General de Postulantes y Voluntarios",
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(side="left")
 
-        top_ficha = tk.Frame(card_ficha, bg="#FFFFFF")
-        top_ficha.pack(fill="x", pady=(0, 10))
-
-        self.lbl_ficha_titulo = tk.Label(
-            top_ficha,
-            text="Ficha del Postulante / Voluntario (Selecciona una fila arriba)",
-            font=("Segoe UI", 11, "bold"),
-            bg="#FFFFFF",
-            fg="#7F1D1D"
-        )
-        self.lbl_ficha_titulo.pack(side="left")
-
-        self.lbl_ficha_badge = tk.Label(
-            top_ficha,
-            text="SIN SELECCIÓN",
-            font=("Segoe UI", 8, "bold"),
-            bg="#F1F5F9",
-            fg="#475569",
+        self.lbl_contador = tk.Label(
+            tbl_hdr,
+            text="0 registros",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["plomo_texto"],
             padx=10,
             pady=3
         )
-        self.lbl_ficha_badge.pack(side="right")
+        self.lbl_contador.pack(side="right")
 
-        det_grid = tk.Frame(card_ficha, bg="#FFF5F5", padx=14, pady=12)
-        det_grid.pack(fill="x", pady=(0, 12))
-        det_grid.columnconfigure(0, weight=1, uniform="ficha_cols")
-        det_grid.columnconfigure(1, weight=1, uniform="ficha_cols")
-
-        self.lbl_col_izq = tk.Label(
-            det_grid,
-            text=self._texto_izq_vacio(),
-            font=("Segoe UI", 9),
-            bg="#FFF5F5",
-            fg="#1E293B",
-            justify="left",
-            anchor="nw"
+        cols = ("ci", "nombre", "edad", "fecha_nac", "telefono", "inscripcion", "estado", "usuario")
+        self.tabla = tb.Treeview(
+            bt,
+            columns=cols,
+            show="headings",
+            height=11,
+            style="Vol.Treeview"
         )
-        self.lbl_col_izq.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+        cfg = {
+            "ci": ("CI", 95),
+            "nombre": ("Nombre Completo", 220),
+            "edad": ("Edad", 70),
+            "fecha_nac": ("F. Nacimiento", 105),
+            "telefono": ("Teléfono", 95),
+            "inscripcion": ("F. Inscripción", 100),
+            "estado": ("Estado", 100),
+            "usuario": ("Cuenta Usuario", 130)
+        }
+        for c, (tit, w) in cfg.items():
+            self.tabla.heading(c, text=tit)
+            self.tabla.column(c, width=w, anchor="center" if c not in ("nombre", "usuario") else "w")
 
-        self.lbl_col_der = tk.Label(
-            det_grid,
-            text="• Usuario Asignado: -\n• Fecha Inscripción: -\n• Fecha Admisión: -\n• Registro en BD (Creado): -\n• Última Modificación BD: -",
-            font=("Segoe UI", 9),
-            bg="#FFF5F5",
-            fg="#1E293B",
-            justify="left",
-            anchor="nw"
+        self.tabla.tag_configure("par", background=PALETTE["blanco"])
+        self.tabla.tag_configure("impar", background="#F9FAFB")
+        self.tabla.pack(fill=BOTH, expand=True)
+        self.tabla.bind("<<TreeviewSelect>>", self._al_seleccionar)
+
+        # =====================================================================
+        # 4. FICHA INFERIOR CURVA DE DETALLE DEL VOLUNTARIO SELECCIONADO
+        # =====================================================================
+        card_det = RoundedCard(
+            self,
+            radius=16,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=18,
+            pady=10,
+            expand_body=False
         )
-        self.lbl_col_der.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+        card_det.pack(fill="x")
 
-        # Barra de acciones de evaluación
-        acciones_bar = tk.Frame(card_ficha, bg="#FFFFFF")
-        acciones_bar.pack(fill="x")
+        self.lbl_detalle = tk.Label(
+            card_det.body,
+            text="Selecciona un registro de la tabla para ver su información completa de contacto y admisión.",
+            font=("Segoe UI", 9),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["plomo_texto"],
+            anchor="w",
+            justify="left"
+        )
+        self.lbl_detalle.pack(fill="x")
 
-        tk.Label(
-            acciones_bar,
-            text="Acciones de Evaluación:",
-            font=("Segoe UI", 9, "bold"),
-            bg="#FFFFFF",
-            fg="#475569"
-        ).pack(side="left")
-
-        tb.Button(
-            acciones_bar,
-            text="🚫 Desactivar Cuenta",
-            bootstyle="secondary-outline",
-            command=self._desactivar
-        ).pack(side="right", padx=(8, 0), ipady=4)
-
-        tb.Button(
-            acciones_bar,
-            text="✕ Rechazar Postulación",
-            bootstyle="warning-outline",
-            command=self._rechazar
-        ).pack(side="right", padx=(8, 0), ipady=4)
-
-        tb.Button(
-            acciones_bar,
-            text="✅ Admitir y Generar Credenciales",
-            bootstyle="danger",
-            command=self._admitir
-        ).pack(side="right", ipady=4, ipadx=12)
-
-    def _texto_izq_vacio(self) -> str:
-        base = "• CI: -\n• Fecha Nacimiento: -\n• Teléfono: -\n• Correo: -"
-        if self.tiene_direccion:
-            base += "\n• Dirección: -"
-        return base
-
-    def _limpiar_filtros(self):
-        self.combo_estado.set("Todos")
-        self.entry_busq.delete(0, tk.END)
-        self._cargar_tabla()
-
-    def _resetear_ficha(self):
-        self.seleccionado = None
-        self.lbl_ficha_titulo.config(text="Ficha del Postulante / Voluntario (Selecciona una fila arriba)")
-        self.lbl_ficha_badge.config(text="SIN SELECCIÓN", bg="#F1F5F9", fg="#475569")
-        self.lbl_col_izq.config(text=self._texto_izq_vacio())
-        self.lbl_col_der.config(text="• Usuario Asignado: -\n• Fecha Inscripción: -\n• Fecha Admisión: -\n• Registro en BD (Creado): -\n• Última Modificación BD: -")
-
-    def _cargar_tabla(self):
+    def _cargar_voluntarios(self):
         for w in self.tabla.get_children():
             self.tabla.delete(w)
         self.voluntarios_cache.clear()
-        self._resetear_ficha()
+        self.lbl_detalle.config(
+            text="Selecciona un registro de la tabla para ver su información completa de contacto y admisión.",
+            fg=PALETTE["plomo_texto"]
+        )
 
         try:
-            lista = self.controller.obtener_voluntarios(self.combo_estado.get(), self.entry_busq.get())
-            for v in lista:
+            filas = self.controller.listar_voluntarios(
+                filtro_estado=self.combo_estado.get(),
+                busqueda=self.entry_buscar.get()
+            )
+            self.lbl_contador.config(text=f"{len(filas)} registro(s)")
+
+            for idx, v in enumerate(filas):
                 iid = str(v["id_voluntario"])
                 self.voluntarios_cache[iid] = v
-                edad_txt = f"{v['edad']} años" if v["edad"] is not None else "-"
+                tag = "par" if idx % 2 == 0 else "impar"
+                edad_txt = f"{v['edad']} años" if v.get("edad") is not None else "-"
+                usuario_txt = v.get("cuenta_usuario") or "Sin cuenta"
+
                 self.tabla.insert("", tk.END, iid=iid, values=(
                     v["ci"],
                     v["nombre_completo"],
                     edad_txt,
-                    v["telefono"] or "-",
+                    v.get("fecha_nacimiento_str", "-"),
+                    v.get("telefono") or "-",
+                    str(v.get("fecha_inscripcion") or "-"),
                     v["estado"],
-                    v["cuenta_usuario"] or "Sin cuenta",
-                    v["fecha_creacion_str"]
-                ))
+                    usuario_txt
+                ), tags=(tag,))
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
-    def _al_seleccionar(self, _event):
+    def _obtener_seleccionado(self) -> dict | None:
         sel = self.tabla.selection()
         if not sel:
-            return
-        v = self.voluntarios_cache.get(sel[0])
+            return None
+        return self.voluntarios_cache.get(sel[0])
+
+    def _al_seleccionar(self, _event):
+        v = self._obtener_seleccionado()
         if not v:
             return
-        self.seleccionado = v
-
-        est = v["estado"]
-        colores_badge = {
-            "Postulante": ("#FEF3C7", "#B45309"),
-            "Admitido": ("#DCFCE7", "#15803D"),
-            "Rechazado": ("#FEE2E2", "#B91C1C"),
-            "Inactivo": ("#E2E8F0", "#475569")
-        }
-        bg_b, fg_b = colores_badge.get(est, ("#F1F5F9", "#475569"))
-
-        self.lbl_ficha_titulo.config(text=f"Ficha: {v['nombre_completo']}")
-        self.lbl_ficha_badge.config(text=est.upper(), bg=bg_b, fg=fg_b)
-
-        edad_info = f" ({v['edad']} años)" if v["edad"] is not None else ""
-        texto_izq = (
-            f"• Carnet de Identidad: {v['ci']}\n"
-            f"• Fecha de Nacimiento: {v['fecha_nacimiento_str']}{edad_info}\n"
-            f"• Teléfono / Celular: {v['telefono'] or 'No registrado'}\n"
-            f"• Correo Electrónico: {v['correo'] or 'No registrado'}"
-        )
-        if self.tiene_direccion:
-            texto_izq += f"\n• Dirección: {v['direccion'] or 'No registrada'}"
-
-        self.lbl_col_izq.config(text=texto_izq)
-
-        self.lbl_col_der.config(
+        correo = v.get("correo") or "No registrado"
+        f_adm = str(v.get("fecha_admision")) if v.get("fecha_admision") else "Pendiente"
+        usr = v.get("cuenta_usuario") or "Sin cuenta generada"
+        self.lbl_detalle.config(
             text=(
-                f"• Cuenta de Acceso: {v['cuenta_usuario'] or 'Pendiente de admisión'}\n"
-                f"• Fecha de Inscripción: {v['fecha_inscripcion'] or '-'}\n"
-                f"• Fecha de Admisión: {v['fecha_admision'] or 'Pendiente'}\n"
-                f"• Auditoría Creación BD: {v['fecha_creacion_str']}\n"
-                f"• Auditoría Modificación BD: {v['fecha_actualizacion_str']}"
-            )
+                f"👤 {v['nombre_completo']}  |  CI: {v['ci']}  |  Edad: {v.get('edad', '-')} años ({v.get('fecha_nacimiento_str', '-')})  |  "
+                f"✉️ Correo: {correo}  |  ✅ Fecha Admisión: {f_adm}  |  🔑 Usuario: {usr}"
+            ),
+            fg=PALETTE["negro"]
         )
 
-    def _admitir(self):
-        exito, msg = self.controller.aprobar_postulante(self.seleccionado)
-        if not exito:
-            messagebox.showwarning("Atención", msg)
+    def _admitir_seleccionado(self):
+        v = self._obtener_seleccionado()
+        if not v:
+            messagebox.showwarning("Selección requerida", "Selecciona un postulante de la tabla.")
             return
-        messagebox.showinfo("Admisión Completada", msg)
-        self._cargar_tabla()
 
-    def _rechazar(self):
-        if not self.seleccionado:
-            messagebox.showwarning("Atención", "Selecciona primero un postulante de la tabla.")
+        if v["estado"] != "Postulante":
+            messagebox.showinfo("Aviso", f"Este registro ya tiene estado '{v['estado']}'.")
             return
-        if not messagebox.askyesno("Confirmar Rechazo", f"¿Rechazar la postulación de {self.seleccionado['nombre_completo']}?"):
-            return
-        exito, msg = self.controller.rechazar_postulante(self.seleccionado)
-        if not exito:
-            messagebox.showwarning("Atención", msg)
-            return
-        messagebox.showinfo("Postulación Rechazada", msg)
-        self._cargar_tabla()
 
-    def _desactivar(self):
-        if not self.seleccionado:
-            messagebox.showwarning("Atención", "Selecciona un voluntario admitido de la tabla.")
+        confirmar = messagebox.askyesno(
+            "Confirmar Admisión",
+            f"¿Admitir a {v['nombre_completo']} (CI: {v['ci']}) como Voluntario activo y generar su cuenta de acceso?"
+        )
+        if not confirmar:
             return
-        if not messagebox.askyesno("Confirmar Desactivación", f"¿Desactivar la cuenta de {self.seleccionado['nombre_completo']}?"):
+
+        exito, resultado = self.controller.admitir_voluntario(v)
+        if exito and isinstance(resultado, dict):
+            messagebox.showinfo(
+                "Voluntario Admitido",
+                f"Se habilitó la cuenta para {resultado['nombre']}:\n\n"
+                f"• Usuario: {resultado['usuario']}\n"
+                f"• Contraseña temporal: {resultado['password']}\n\n"
+                "Entrega estas credenciales al voluntario para su primer ingreso."
+            )
+            self._cargar_voluntarios()
+        else:
+            messagebox.showerror("Error al Admitir", str(resultado))
+
+    def _cambiar_estado_seleccionado(self, nuevo_estado: str):
+        v = self._obtener_seleccionado()
+        if not v:
+            messagebox.showwarning("Selección requerida", "Selecciona un registro de la tabla.")
             return
-        exito, msg = self.controller.desactivar_voluntario(self.seleccionado)
-        if not exito:
-            messagebox.showwarning("Atención", msg)
+
+        if v["estado"] == nuevo_estado:
+            messagebox.showinfo("Aviso", f"El registro ya se encuentra en estado '{nuevo_estado}'.")
             return
-        messagebox.showinfo("Cuenta Desactivada", msg)
-        self._cargar_tabla()
+
+        if nuevo_estado == "Rechazado" and v["estado"] != "Postulante":
+            messagebox.showwarning("Acción no permitida", "Solo se pueden rechazar postulantes pendientes.")
+            return
+
+        if nuevo_estado == "Inactivo" and v["estado"] != "Admitido":
+            messagebox.showwarning("Acción no permitida", "Solo se pueden desactivar voluntarios admitidos.")
+            return
+
+        confirmar = messagebox.askyesno(
+            "Confirmar Cambio de Estado",
+            f"¿Cambiar el estado de {v['nombre_completo']} a '{nuevo_estado}'?"
+        )
+        if not confirmar:
+            return
+
+        exito, mensaje = self.controller.cambiar_estado(v, nuevo_estado)
+        if exito:
+            messagebox.showinfo("Estado Actualizado", mensaje)
+            self._cargar_voluntarios()
+        else:
+            messagebox.showerror("Error", mensaje)

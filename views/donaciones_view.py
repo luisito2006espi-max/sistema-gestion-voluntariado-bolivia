@@ -3,113 +3,213 @@ from tkinter import messagebox
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from controllers.donacion_controller import DonacionController
+from views.ui_components import PALETTE, RoundedCard, InputValidators
 
 
-class GestionDonacionesView(tb.Frame):
-    """Vista para Administrador y Recepcionista: Registro y control de donaciones monetarias y materiales."""
+class GestionDonacionesView(tk.Frame):
+    """Vista para Administrador: Registro y control de donaciones monetarias y materiales."""
 
     def __init__(self, master, sesion: dict):
-        super().__init__(master)
+        super().__init__(master, bg=PALETTE["plomo_fondo"])
         self.sesion = sesion
         self.controller = DonacionController()
 
         self.tipos_map = {}
         self.metodos_map = {}
         self.insumos_map = {}
-        self.carrito_insumos = []  # Lista de dicts para DONACION_DETALLE
+        self.carrito_insumos = []
         self.donaciones_cache = {}
 
         self.pack(fill=BOTH, expand=True)
+        self._configurar_estilos_tabla()
         self._construir_ui()
         self._inicializar_datos()
 
+    def _configurar_estilos_tabla(self):
+        """Aplica el estilo limpio en plomo y negro igual al Panel General."""
+        style = tb.Style()
+        style.configure(
+            "Don.Treeview",
+            background=PALETTE["blanco"],
+            foreground=PALETTE["negro"],
+            fieldbackground=PALETTE["blanco"],
+            rowheight=30,
+            borderwidth=0,
+            font=("Segoe UI", 9)
+        )
+        style.configure(
+            "Don.Treeview.Heading",
+            background=PALETTE["plomo_fondo"],
+            foreground=PALETTE["negro"],
+            relief="flat",
+            borderwidth=0,
+            font=("Segoe UI", 9, "bold"),
+            padding=(8, 7)
+        )
+        style.map(
+            "Don.Treeview.Heading",
+            background=[("active", PALETTE["plomo_borde"])]
+        )
+        style.map(
+            "Don.Treeview",
+            background=[("selected", PALETTE["rojo_suave"])],
+            foreground=[("selected", PALETTE["negro"])]
+        )
+
     def _construir_ui(self):
-        header = tk.Frame(self, bg="#FFF5F5")
+        # =====================================================================
+        # 1. ENCABEZADO (20 pt)
+        # =====================================================================
+        header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         header.pack(fill="x", pady=(0, 14))
+
+        tk.Label(
+            header,
+            text="SAVE THE CHILDREN BOLIVIA  •  RECURSOS Y APORTES",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["rojo"]
+        ).pack(anchor="w")
 
         tk.Label(
             header,
             text="Gestión de Donaciones (Monetarias y en Especie)",
             font=("Segoe UI", 20, "bold"),
-            bg="#FFF5F5",
-            fg="#7F1D1D"
-        ).pack(anchor="w")
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(2, 2))
 
         tk.Label(
             header,
             text="Registra aportes económicos o entrega de insumos con trazabilidad completa del donante.",
             font=("Segoe UI", 10),
-            bg="#FFF5F5",
-            fg="#64748B"
-        ).pack(anchor="w", pady=(2, 0))
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["plomo_texto"]
+        ).pack(anchor="w")
 
-        # Cuerpo principal dividido en 2 columnas
-        cuerpo = tk.Frame(self, bg="#FFF5F5")
+        # =====================================================================
+        # 2. CUERPO DIVIDIDO EN DOS TARJETAS CURVAS
+        # =====================================================================
+        cuerpo = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         cuerpo.pack(fill=BOTH, expand=True)
-        cuerpo.columnconfigure(0, weight=48)
-        cuerpo.columnconfigure(1, weight=52)
+        cuerpo.columnconfigure(0, weight=48, uniform="don_cols")
+        cuerpo.columnconfigure(1, weight=52, uniform="don_cols")
         cuerpo.rowconfigure(0, weight=1)
 
         # =====================================================================
         # PANEL IZQUIERDO: FORMULARIO DE REGISTRO
         # =====================================================================
-        card_reg = tk.Frame(cuerpo, bg="#FFFFFF", padx=18, pady=16)
+        card_reg = RoundedCard(
+            cuerpo,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=22,
+            pady=18,
+            expand_body=True
+        )
         card_reg.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
+        br = card_reg.body
+
         tk.Label(
-            card_reg,
+            br,
             text="1. Datos del Donante",
-            font=("Segoe UI", 11, "bold"),
-            bg="#FFFFFF",
-            fg="#991B1B"
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(0, 8))
 
-        # Fila CI/NIT + Botón Buscar
-        doc_row = tk.Frame(card_reg, bg="#FFFFFF")
-        doc_row.pack(fill="x", pady=(0, 8))
+        # Fila CI/NIT (Solo números) + Botón Buscar
+        doc_row = tk.Frame(br, bg=PALETTE["blanco"])
+        doc_row.pack(fill="x", pady=(0, 10))
 
-        tk.Label(doc_row, text="CI / NIT:", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(side="left", padx=(0, 6))
-        self.entry_doc = tb.Entry(doc_row, width=18, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_doc.pack(side="left", padx=(0, 6), ipady=3)
-        self.entry_doc.bind("<Return>", lambda e: self._buscar_donante())
+        tk.Label(
+            doc_row,
+            text="CI / NIT [Solo números]:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 8))
 
-        tb.Button(
-            doc_row, text="🔍 Buscar", bootstyle="danger-outline",
+        self.entry_doc = tb.Entry(doc_row, width=18, font=("Segoe UI", 10))
+        self.entry_doc.pack(side="left", padx=(0, 8), ipady=3)
+        InputValidators.aplicar(self.entry_doc, "enteros")
+        self.entry_doc.bind("<Return>", lambda _e: self._buscar_donante())
+
+        btn_buscar = tk.Button(
+            doc_row,
+            text="🔍 Buscar",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["rojo"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=12,
+            pady=6,
+            cursor="hand2",
             command=self._buscar_donante
-        ).pack(side="left")
+        )
+        btn_buscar.pack(side="left")
+        btn_buscar.bind("<Enter>", lambda _e: btn_buscar.config(bg=PALETTE["rojo"], fg=PALETTE["blanco"]))
+        btn_buscar.bind("<Leave>", lambda _e: btn_buscar.config(bg=PALETTE["plomo_fondo"], fg=PALETTE["negro"]))
 
-        # Nombre / Razón Social
-        tk.Label(card_reg, text="Nombre Completo o Razón Social *", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(anchor="w")
-        self.entry_nombre = tb.Entry(card_reg, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_nombre.pack(fill="x", ipady=3, pady=(2, 8))
+        # Nombre / Razón Social (Solo letras)
+        tk.Label(
+            br,
+            text="Nombre Completo o Razón Social *  [Solo letras]",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
 
-        # Teléfono y Correo en 2 columnas
-        tel_mail_frame = tk.Frame(card_reg, bg="#FFFFFF")
+        self.entry_nombre = tb.Entry(br, font=("Segoe UI", 10))
+        self.entry_nombre.pack(fill="x", ipady=3, pady=(3, 10))
+        InputValidators.aplicar(self.entry_nombre, "letras")
+
+        # Teléfono (Solo números) y Correo Electrónico en 2 columnas
+        tel_mail_frame = tk.Frame(br, bg=PALETTE["blanco"])
         tel_mail_frame.pack(fill="x", pady=(0, 12))
-        tel_mail_frame.columnconfigure(0, weight=1)
-        tel_mail_frame.columnconfigure(1, weight=1)
+        tel_mail_frame.columnconfigure(0, weight=1, uniform="tm_cols")
+        tel_mail_frame.columnconfigure(1, weight=1, uniform="tm_cols")
 
-        tk.Label(tel_mail_frame, text="Teléfono", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=0, column=0, sticky="w", padx=(0, 4))
-        self.entry_tel = tb.Entry(tel_mail_frame, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_tel.grid(row=1, column=0, sticky="ew", padx=(0, 4), ipady=3)
+        tk.Label(
+            tel_mail_frame,
+            text="Teléfono  [Solo números]",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).grid(row=0, column=0, sticky="w", padx=(0, 6))
 
-        tk.Label(tel_mail_frame, text="Correo Electrónico", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").grid(row=0, column=1, sticky="w", padx=(4, 0))
-        self.entry_correo = tb.Entry(tel_mail_frame, font=("Segoe UI", 10), bootstyle="danger")
-        self.entry_correo.grid(row=1, column=1, sticky="ew", padx=(4, 0), ipady=3)
+        self.entry_tel = tb.Entry(tel_mail_frame, font=("Segoe UI", 10))
+        self.entry_tel.grid(row=1, column=0, sticky="ew", padx=(0, 6), ipady=3, pady=(3, 0))
+        InputValidators.aplicar(self.entry_tel, "enteros")
 
-        # Separador
-        tk.Frame(card_reg, bg="#E2E8F0", height=1).pack(fill="x", pady=(2, 10))
+        tk.Label(
+            tel_mail_frame,
+            text="Correo Electrónico",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).grid(row=0, column=1, sticky="w", padx=(6, 0))
+
+        self.entry_correo = tb.Entry(tel_mail_frame, font=("Segoe UI", 10))
+        self.entry_correo.grid(row=1, column=1, sticky="ew", padx=(6, 0), ipady=3, pady=(3, 0))
+
+        # Separador en plomo claro
+        tk.Frame(br, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(2, 12))
 
         # Sección 2: Tipo de Donación
-        tipo_row = tk.Frame(card_reg, bg="#FFFFFF")
+        tipo_row = tk.Frame(br, bg=PALETTE["blanco"])
         tipo_row.pack(fill="x", pady=(0, 10))
 
         tk.Label(
             tipo_row,
             text="2. Tipo de Donación *",
-            font=("Segoe UI", 11, "bold"),
-            bg="#FFFFFF",
-            fg="#991B1B"
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
         ).pack(side="left")
 
         self.combo_tipo = tb.Combobox(
@@ -120,48 +220,100 @@ class GestionDonacionesView(tb.Frame):
             bootstyle="danger"
         )
         self.combo_tipo.pack(side="right")
-        self.combo_tipo.bind("<<ComboboxSelected>>", lambda e: self._alternar_panel_tipo())
+        self.combo_tipo.bind("<<ComboboxSelected>>", lambda _e: self._alternar_panel_tipo())
 
-        # Contenedor dinámico (cambia según DINERO o MATERIAL)
-        self.contenedor_dinamico = tk.Frame(card_reg, bg="#FFF5F5", padx=12, pady=12)
+        # Contenedor dinámico en plomo neutro (cambia según DINERO o MATERIAL)
+        self.contenedor_dinamico = tk.Frame(br, bg=PALETTE["plomo_fondo"], padx=14, pady=12)
         self.contenedor_dinamico.pack(fill=BOTH, expand=True, pady=(0, 10))
 
         # --- Sub-panel A: DINERO ---
-        self.frame_dinero = tk.Frame(self.contenedor_dinamico, bg="#FFF5F5")
+        self.frame_dinero = tk.Frame(self.contenedor_dinamico, bg=PALETTE["plomo_fondo"])
 
-        tk.Label(self.frame_dinero, text="Monto Donado (Bs.) *", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(anchor="w")
-        self.entry_monto = tb.Entry(self.frame_dinero, font=("Segoe UI", 11, "bold"), bootstyle="danger")
-        self.entry_monto.pack(fill="x", ipady=4, pady=(2, 10))
+        tk.Label(
+            self.frame_dinero,
+            text="Monto Donado (Bs.) *  [Solo números / decimales]",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
 
-        tk.Label(self.frame_dinero, text="Método de Pago *", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(anchor="w")
-        self.combo_metodo = tb.Combobox(self.frame_dinero, state="readonly", font=("Segoe UI", 10), bootstyle="danger")
-        self.combo_metodo.pack(fill="x", ipady=3, pady=(2, 6))
+        self.entry_monto = tb.Entry(self.frame_dinero, font=("Segoe UI", 11, "bold"))
+        self.entry_monto.pack(fill="x", ipady=4, pady=(3, 12))
+        InputValidators.aplicar(self.entry_monto, "decimales")
+
+        tk.Label(
+            self.frame_dinero,
+            text="Método de Pago *  (QR, Efectivo o Transferencia)",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
+
+        self.combo_metodo = tb.Combobox(
+            self.frame_dinero,
+            state="readonly",
+            font=("Segoe UI", 10),
+            bootstyle="danger"
+        )
+        self.combo_metodo.pack(fill="x", ipady=3, pady=(3, 6))
 
         # --- Sub-panel B: MATERIAL ---
-        self.frame_material = tk.Frame(self.contenedor_dinamico, bg="#FFF5F5")
+        self.frame_material = tk.Frame(self.contenedor_dinamico, bg=PALETTE["plomo_fondo"])
 
-        add_bar = tk.Frame(self.frame_material, bg="#FFF5F5")
+        add_bar = tk.Frame(self.frame_material, bg=PALETTE["plomo_fondo"])
         add_bar.pack(fill="x", pady=(0, 8))
 
-        tk.Label(add_bar, text="Insumo:", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(side="left", padx=(0, 4))
-        self.combo_insumo = tb.Combobox(add_bar, state="readonly", width=22, font=("Segoe UI", 9), bootstyle="danger")
+        tk.Label(
+            add_bar,
+            text="Insumo:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 4))
+
+        self.combo_insumo = tb.Combobox(
+            add_bar,
+            state="readonly",
+            width=21,
+            font=("Segoe UI", 9),
+            bootstyle="danger"
+        )
         self.combo_insumo.pack(side="left", padx=(0, 6))
 
-        tk.Label(add_bar, text="Cant:", font=("Segoe UI", 9, "bold"), bg="#FFF5F5", fg="#7F1D1D").pack(side="left", padx=(0, 4))
-        self.entry_cant = tb.Entry(add_bar, width=7, font=("Segoe UI", 9), bootstyle="danger")
-        self.entry_cant.pack(side="left", padx=(0, 6))
+        tk.Label(
+            add_bar,
+            text="Cant:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 4))
 
-        tb.Button(
-            add_bar, text="+ Agregar", bootstyle="danger",
+        self.entry_cant = tb.Entry(add_bar, width=7, font=("Segoe UI", 9))
+        self.entry_cant.pack(side="left", padx=(0, 6))
+        InputValidators.aplicar(self.entry_cant, "decimales")
+
+        btn_add_item = tk.Button(
+            add_bar,
+            text="+ Agregar",
+            font=("Segoe UI", 8, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=10,
+            pady=5,
+            cursor="hand2",
             command=self._agregar_insumo_lista
-        ).pack(side="right")
+        )
+        btn_add_item.pack(side="right")
 
         self.tabla_carrito = tb.Treeview(
             self.frame_material,
             columns=("insumo", "cantidad", "unidad"),
             show="headings",
             height=4,
-            bootstyle="danger"
+            style="Don.Treeview"
         )
         self.tabla_carrito.heading("insumo", text="Insumo")
         self.tabla_carrito.heading("cantidad", text="Cantidad")
@@ -169,49 +321,109 @@ class GestionDonacionesView(tb.Frame):
         self.tabla_carrito.column("insumo", width=150, anchor="w")
         self.tabla_carrito.column("cantidad", width=70, anchor="center")
         self.tabla_carrito.column("unidad", width=110, anchor="center")
+        self.tabla_carrito.tag_configure("par", background=PALETTE["blanco"])
+        self.tabla_carrito.tag_configure("impar", background="#F9FAFB")
         self.tabla_carrito.pack(fill=BOTH, expand=True, pady=(0, 6))
 
-        tb.Button(
+        btn_quitar_item = tk.Button(
             self.frame_material,
             text="✕ Quitar Ítem Seleccionado",
-            bootstyle="secondary-outline",
+            font=("Segoe UI", 8, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["rojo_suave"],
+            bd=0,
+            padx=10,
+            pady=4,
+            cursor="hand2",
             command=self._quitar_insumo_lista
-        ).pack(anchor="e")
+        )
+        btn_quitar_item.pack(anchor="e")
 
-        # Observaciones y Botón Guardar
-        tk.Label(card_reg, text="Observaciones (Opcional)", font=("Segoe UI", 9, "bold"), bg="#FFFFFF", fg="#1E293B").pack(anchor="w")
-        self.entry_obs = tb.Entry(card_reg, font=("Segoe UI", 9), bootstyle="danger")
-        self.entry_obs.pack(fill="x", ipady=3, pady=(2, 10))
+        # Observaciones y Botones Inferiores
+        tk.Label(
+            br,
+            text="Observaciones (Opcional)",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
 
-        btns_bottom = tk.Frame(card_reg, bg="#FFFFFF")
+        self.entry_obs = tb.Entry(br, font=("Segoe UI", 9))
+        self.entry_obs.pack(fill="x", ipady=3, pady=(3, 12))
+
+        btns_bottom = tk.Frame(br, bg=PALETTE["blanco"])
         btns_bottom.pack(fill="x")
 
-        tb.Button(
-            btns_bottom, text="Limpiar", bootstyle="secondary-outline",
+        btn_limpiar = tk.Button(
+            btns_bottom,
+            text="Limpiar",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["plomo_borde"],
+            bd=0,
+            padx=16,
+            pady=9,
+            cursor="hand2",
             command=self._limpiar_todo
-        ).pack(side="left", padx=(0, 8), ipady=5)
+        )
+        btn_limpiar.pack(side="left", padx=(0, 10))
 
-        tb.Button(
-            btns_bottom, text="✓ Registrar Donación", bootstyle="danger",
+        btn_guardar = tk.Button(
+            btns_bottom,
+            text="✓  Registrar Donación",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            pady=9,
+            cursor="hand2",
             command=self._guardar_donacion
-        ).pack(side="right", fill="x", expand=True, ipady=5)
+        )
+        btn_guardar.pack(side="right", fill="x", expand=True)
+        btn_guardar.bind("<Enter>", lambda _e: btn_guardar.config(bg=PALETTE["rojo_hover"]))
+        btn_guardar.bind("<Leave>", lambda _e: btn_guardar.config(bg=PALETTE["rojo"]))
 
         # =====================================================================
         # PANEL DERECHO: HISTORIAL Y DESGLOSE DE DONACIONES
         # =====================================================================
-        card_hist = tk.Frame(cuerpo, bg="#FFFFFF", padx=18, pady=16)
+        card_hist = RoundedCard(
+            cuerpo,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=20,
+            pady=18,
+            expand_body=True
+        )
         card_hist.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
 
-        top_hist = tk.Frame(card_hist, bg="#FFFFFF")
+        bh = card_hist.body
+
+        top_hist = tk.Frame(bh, bg=PALETTE["blanco"])
         top_hist.pack(fill="x", pady=(0, 10))
 
+        tit_hist_box = tk.Frame(top_hist, bg=PALETTE["blanco"])
+        tit_hist_box.pack(side="left")
+
         tk.Label(
-            top_hist,
-            text="Historial de Donaciones",
-            font=("Segoe UI", 11, "bold"),
-            bg="#FFFFFF",
-            fg="#7F1D1D"
-        ).pack(side="left")
+            tit_hist_box,
+            text="🎁  Historial de Donaciones",
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
+
+        tk.Label(
+            tit_hist_box,
+            text="Selecciona un registro para ver el desglose completo",
+            font=("Segoe UI", 8),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["plomo_texto"]
+        ).pack(anchor="w")
 
         self.combo_filtro = tb.Combobox(
             top_hist,
@@ -221,16 +433,15 @@ class GestionDonacionesView(tb.Frame):
             bootstyle="danger"
         )
         self.combo_filtro.set("Todos")
-        self.combo_filtro.pack(side="right")
-        self.combo_filtro.bind("<<ComboboxSelected>>", lambda e: self._cargar_historial())
+        self.combo_filtro.pack(side="right", pady=2)
+        self.combo_filtro.bind("<<ComboboxSelected>>", lambda _e: self._cargar_historial())
 
-        # Tabla SIN ID visible
         cols = ("fecha", "donante", "tipo", "detalle")
         self.tabla_hist = tb.Treeview(
-            card_hist,
+            bh,
             columns=cols,
             show="headings",
-            bootstyle="danger"
+            style="Don.Treeview"
         )
         self.tabla_hist.heading("fecha", text="Fecha")
         self.tabla_hist.heading("donante", text="Donante")
@@ -240,23 +451,35 @@ class GestionDonacionesView(tb.Frame):
         self.tabla_hist.column("fecha", width=90, anchor="center")
         self.tabla_hist.column("donante", width=180, anchor="w")
         self.tabla_hist.column("tipo", width=85, anchor="center")
-        self.tabla_hist.column("detalle", width=155, anchor="w")
+        self.tabla_hist.column("detalle", width=165, anchor="w")
+
+        self.tabla_hist.tag_configure("par", background=PALETTE["blanco"])
+        self.tabla_hist.tag_configure("impar", background="#F9FAFB")
         self.tabla_hist.pack(fill=BOTH, expand=True, pady=(0, 12))
         self.tabla_hist.bind("<<TreeviewSelect>>", self._al_seleccionar_donacion)
 
         # Caja inferior de detalle de la donación seleccionada
         self.lbl_detalle_don = tk.Label(
-            card_hist,
+            bh,
             text="Selecciona una donación de la tabla para ver su desglose completo.",
             font=("Segoe UI", 9),
-            bg="#FEF2F2",
-            fg="#7F1D1D",
-            padx=12,
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            padx=14,
             pady=10,
             justify="left",
             anchor="w"
         )
         self.lbl_detalle_don.pack(fill="x")
+
+    @staticmethod
+    def _asignar_texto_seguro(entry_widget, texto: str):
+        """Inserta texto cargado desde BD sin bloquearse si el registro antiguo tenía símbolos."""
+        modo_anterior = entry_widget.cget("validate")
+        entry_widget.configure(validate="none")
+        entry_widget.delete(0, tk.END)
+        entry_widget.insert(0, texto or "")
+        entry_widget.configure(validate=modo_anterior)
 
     def _inicializar_datos(self):
         try:
@@ -305,16 +528,17 @@ class GestionDonacionesView(tb.Frame):
 
         encontrado = self.controller.buscar_donante(doc)
         if not encontrado:
-            messagebox.showinfo("Nuevo Donante", "No se encontró un donante previo con ese documento. Completa sus datos para registrarlo.")
+            messagebox.showinfo(
+                "Nuevo Donante",
+                "No se encontró un donante previo con ese documento. Completa sus datos para registrarlo."
+            )
             self.entry_nombre.focus_set()
             return
 
-        self.entry_nombre.delete(0, tk.END)
-        self.entry_nombre.insert(0, encontrado["nombre"])
-        self.entry_tel.delete(0, tk.END)
-        self.entry_tel.insert(0, encontrado["telefono"])
+        self._asignar_texto_seguro(self.entry_nombre, encontrado.get("nombre", ""))
+        self._asignar_texto_seguro(self.entry_tel, encontrado.get("telefono", ""))
         self.entry_correo.delete(0, tk.END)
-        self.entry_correo.insert(0, encontrado["correo"])
+        self.entry_correo.insert(0, encontrado.get("correo") or "")
         messagebox.showinfo("Donante Encontrado", f"Datos cargados de: {encontrado['nombre']}")
 
     def _agregar_insumo_lista(self):
@@ -324,7 +548,6 @@ class GestionDonacionesView(tb.Frame):
             messagebox.showwarning("Validación de Insumo", msg)
             return
 
-        # Si el insumo ya está en la lista temporal, acumular la cantidad para evitar duplicados
         actualizado = False
         for existente in self.carrito_insumos:
             if existente["id_insumo"] == item["id_insumo"]:
@@ -352,14 +575,23 @@ class GestionDonacionesView(tb.Frame):
         for w in self.tabla_carrito.get_children():
             self.tabla_carrito.delete(w)
         for idx, item in enumerate(self.carrito_insumos):
+            tag = "par" if idx % 2 == 0 else "impar"
             self.tabla_carrito.insert("", tk.END, iid=str(idx), values=(
                 item["nombre"],
                 f"{item['cantidad']:g}",
                 item["unidad_medida"]
-            ))
+            ), tags=(tag,))
 
     def _limpiar_todo(self):
-        for entry in (self.entry_doc, self.entry_nombre, self.entry_tel, self.entry_correo, self.entry_monto, self.entry_cant, self.entry_obs):
+        for entry in (
+            self.entry_doc,
+            self.entry_nombre,
+            self.entry_tel,
+            self.entry_correo,
+            self.entry_monto,
+            self.entry_cant,
+            self.entry_obs
+        ):
             entry.delete(0, tk.END)
         self.carrito_insumos.clear()
         self._refrescar_tabla_carrito()
@@ -399,9 +631,10 @@ class GestionDonacionesView(tb.Frame):
 
         try:
             registros = self.controller.obtener_historial(self.combo_filtro.get())
-            for r in registros:
+            for idx, r in enumerate(registros):
                 iid = str(r["id_donacion"])
                 self.donaciones_cache[iid] = r
+                tag = "par" if idx % 2 == 0 else "impar"
 
                 if r["tipo_donacion"].upper() == "DINERO":
                     resumen = f"Bs. {float(r['monto'] or 0):,.2f} ({r['metodo_pago'] or '-'})"
@@ -413,7 +646,7 @@ class GestionDonacionesView(tb.Frame):
                     r["donante"],
                     r["tipo_donacion"],
                     resumen
-                ))
+                ), tags=(tag,))
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
@@ -427,14 +660,14 @@ class GestionDonacionesView(tb.Frame):
 
         if don["tipo_donacion"].upper() == "DINERO":
             texto = (
-                f"Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}\n"
-                f"Tipo: DINERO  |  Método de Pago: {don['metodo_pago']}  |  Monto: Bs. {float(don['monto'] or 0):,.2f}"
+                f"👤 Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}\n"
+                f"💵 Tipo: DINERO  |  Método de Pago: {don['metodo_pago']}  |  Monto: Bs. {float(don['monto'] or 0):,.2f}"
             )
             self.lbl_detalle_don.config(text=texto)
         else:
             try:
                 items = self.controller.obtener_desglose_material(don["id_donacion"])
-                lineas = [f"Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}  |  Tipo: MATERIAL"]
+                lineas = [f"👤 Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}  |  📦 Tipo: MATERIAL"]
                 for it in items:
                     lineas.append(f"  • {it['insumo']}: {float(it['cantidad']):g} {it['unidad_medida']}")
                 self.lbl_detalle_don.config(text="\n".join(lineas))

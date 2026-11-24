@@ -109,7 +109,7 @@ class MisActividadesView(tk.Frame):
         # 2. TARJETAS CURVAS DE RESUMEN DEL VOLUNTARIO
         # =====================================================================
         kpi_row = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        kpi_row.pack(fill="x", pady=(0, 14))
+        kpi_row.pack(fill="x", pady=(0, 8))
 
         self.lbl_kpi_pend, self.lbl_kpi_pend_sub = self._crear_kpi(
             kpi_row, 0, "ACTIVIDADES PRÓXIMAS", PALETTE["rojo"]
@@ -183,7 +183,7 @@ class MisActividadesView(tk.Frame):
             card_tbl.body,
             columns=cols,
             show="headings",
-            height=7,
+            height=5,
             style="Port.Treeview"
         )
         cfg = {
@@ -384,23 +384,15 @@ class MiHistorialHorasView(tk.Frame):
         # 1. ENCABEZADO INSTITUCIONAL (20 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
+        header.pack(fill="x", pady=(0, 8))
 
         izq_hdr = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         izq_hdr.pack(side="left", fill="x", expand=True)
 
         tk.Label(
             izq_hdr,
-            text="SAVE THE CHILDREN BOLIVIA  •  CONSTANCIA DE SERVICIO",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            izq_hdr,
             text="Mi Historial de Horas y Participación",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -499,7 +491,7 @@ class MiHistorialHorasView(tk.Frame):
             card_tbl.body,
             columns=cols,
             show="headings",
-            height=9,
+            height=6,
             style="Port.Treeview"
         )
         cfg = {

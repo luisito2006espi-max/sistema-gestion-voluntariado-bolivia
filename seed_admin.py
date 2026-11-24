@@ -21,7 +21,7 @@ class SeedAdminManager:
         raise RuntimeError("No se encontró columna de contraseña en la tabla USUARIO.")
 
     def asegurar_catalogos_base(self):
-        """Garantiza los catálogos obligatorios (esquema v2.0) sin rol Recepcionista."""
+        """Garantiza los catálogos obligatorios (esquema v2.0) sin Tarjeta ni Recepcionista."""
         conn = None
         cursor = None
         try:
@@ -67,10 +67,10 @@ class SeedAdminManager:
                 ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
             """)
 
+            cursor.execute("DELETE FROM METODO_PAGO WHERE LOWER(nombre) = 'tarjeta'")
             cursor.execute("""
                 INSERT INTO METODO_PAGO (id_metodo_pago, nombre) VALUES
                 (1, 'QR'),
-                (2, 'Tarjeta'),
                 (3, 'Efectivo'),
                 (4, 'Transferencia')
                 ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
@@ -98,7 +98,7 @@ class SeedAdminManager:
                 conn.close()
 
     def crear_administrador(self, usuario: str, password: str) -> tuple[bool, str]:
-        """Crea un nuevo Administrador respetando la auditoría nativa de MySQL v2.0."""
+        """Crea un nuevo Administrador usando AuthModel.hashear_password (utils/security.py)."""
         user_limpio = usuario.strip().lower()
         if len(user_limpio) < 4:
             return False, "El nombre de usuario debe tener al menos 4 caracteres."

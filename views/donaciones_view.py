@@ -58,26 +58,18 @@ class GestionDonacionesView(tk.Frame):
 
     def _construir_ui(self):
         # =====================================================================
-        # 1. ENCABEZADO (20 pt)
+        # 1. ENCABEZADO
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
-
-        tk.Label(
-            header,
-            text="SAVE THE CHILDREN BOLIVIA  •  RECURSOS Y APORTES",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
+        header.pack(fill="x", pady=(0, 10))
 
         tk.Label(
             header,
             text="Gestión de Donaciones (Monetarias y en Especie)",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 17, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
-        ).pack(anchor="w", pady=(2, 2))
+        ).pack(anchor="w")
 
         tk.Label(
             header,
@@ -85,7 +77,7 @@ class GestionDonacionesView(tk.Frame):
             font=("Segoe UI", 10),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["plomo_texto"]
-        ).pack(anchor="w")
+        ).pack(anchor="w", pady=(2, 0))
 
         # =====================================================================
         # 2. CUERPO DIVIDIDO EN DOS TARJETAS CURVAS
@@ -97,21 +89,99 @@ class GestionDonacionesView(tk.Frame):
         cuerpo.rowconfigure(0, weight=1)
 
         # =====================================================================
-        # PANEL IZQUIERDO: FORMULARIO DE REGISTRO
+        # PANEL IZQUIERDO: FORMULARIO DESPLAZABLE + BOTONES FIJOS AL PIE
         # =====================================================================
         card_reg = RoundedCard(
             cuerpo,
             radius=20,
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
-            padx=22,
-            pady=18,
+            padx=20,
+            pady=16,
             expand_body=True
         )
         card_reg.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
-        br = card_reg.body
+        # Pie fijo con los botones principales (siempre visible)
+        footer_reg = tk.Frame(card_reg.body, bg=PALETTE["blanco"])
+        footer_reg.pack(side="bottom", fill="x", pady=(8, 0))
 
+        tk.Frame(footer_reg, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(0, 10))
+
+        btns_bottom = tk.Frame(footer_reg, bg=PALETTE["blanco"])
+        btns_bottom.pack(fill="x")
+
+        btn_limpiar = tk.Button(
+            btns_bottom,
+            text="Limpiar",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            activebackground=PALETTE["plomo_borde"],
+            bd=0,
+            padx=16,
+            pady=9,
+            cursor="hand2",
+            command=self._limpiar_todo
+        )
+        btn_limpiar.pack(side="left", padx=(0, 10))
+
+        btn_guardar = tk.Button(
+            btns_bottom,
+            text="✓  Registrar Donación",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            pady=9,
+            cursor="hand2",
+            command=self._guardar_donacion
+        )
+        btn_guardar.pack(side="right", fill="x", expand=True)
+        btn_guardar.bind("<Enter>", lambda _e: btn_guardar.config(bg=PALETTE["rojo_hover"]))
+        btn_guardar.bind("<Leave>", lambda _e: btn_guardar.config(bg=PALETTE["rojo"]))
+
+        # Contenedor desplazable (Canvas + Scrollbar) para todos los campos
+        scroll_wrap = tk.Frame(card_reg.body, bg=PALETTE["blanco"])
+        scroll_wrap.pack(side="top", fill=BOTH, expand=True)
+
+        self.canvas_reg = tk.Canvas(
+            scroll_wrap,
+            bg=PALETTE["blanco"],
+            highlightthickness=0,
+            bd=0
+        )
+        scrollbar_reg = tb.Scrollbar(
+            scroll_wrap,
+            orient="vertical",
+            command=self.canvas_reg.yview,
+            bootstyle="danger-round"
+        )
+        self.canvas_reg.configure(yscrollcommand=scrollbar_reg.set)
+
+        scrollbar_reg.pack(side="right", fill="y", padx=(6, 0))
+        self.canvas_reg.pack(side="left", fill=BOTH, expand=True)
+
+        br = tk.Frame(self.canvas_reg, bg=PALETTE["blanco"], padx=2)
+        self._reg_win_id = self.canvas_reg.create_window((0, 0), window=br, anchor="nw")
+
+        br.bind(
+            "<Configure>",
+            lambda _e: self.canvas_reg.configure(scrollregion=self.canvas_reg.bbox("all"))
+        )
+        self.canvas_reg.bind(
+            "<Configure>",
+            lambda e: self.canvas_reg.itemconfigure(self._reg_win_id, width=e.width)
+        )
+
+        # Desplazamiento con rueda del ratón dentro del formulario
+        scroll_wrap.bind("<Enter>", lambda _e: self.canvas_reg.bind_all("<MouseWheel>", self._on_mousewheel_reg))
+        scroll_wrap.bind("<Leave>", lambda _e: self.canvas_reg.unbind_all("<MouseWheel>"))
+        self.bind("<Destroy>", lambda _e: self._desvincular_rueda())
+
+        # --- Contenido dentro del área desplazable (br) ---
         tk.Label(
             br,
             text="1. Datos del Donante",
@@ -126,7 +196,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             doc_row,
-            text="CI / NIT [Solo números]:",
+            text="CI / NIT:",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -158,7 +228,7 @@ class GestionDonacionesView(tk.Frame):
         # Nombre / Razón Social (Solo letras)
         tk.Label(
             br,
-            text="Nombre Completo o Razón Social *  [Solo letras]",
+            text="Nombre Completo o Razón Social *  ",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -176,7 +246,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             tel_mail_frame,
-            text="Teléfono  [Solo números]",
+            text="Teléfono ",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -224,14 +294,14 @@ class GestionDonacionesView(tk.Frame):
 
         # Contenedor dinámico en plomo neutro (cambia según DINERO o MATERIAL)
         self.contenedor_dinamico = tk.Frame(br, bg=PALETTE["plomo_fondo"], padx=14, pady=12)
-        self.contenedor_dinamico.pack(fill=BOTH, expand=True, pady=(0, 10))
+        self.contenedor_dinamico.pack(fill="x", pady=(0, 10))
 
         # --- Sub-panel A: DINERO ---
         self.frame_dinero = tk.Frame(self.contenedor_dinamico, bg=PALETTE["plomo_fondo"])
 
         tk.Label(
             self.frame_dinero,
-            text="Monto Donado (Bs.) *  [Solo números / decimales]",
+            text="Monto Donado (Bs.) *  ",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
@@ -243,7 +313,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             self.frame_dinero,
-            text="Método de Pago *  (QR, Efectivo o Transferencia)",
+            text="Método de Pago *  ",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
@@ -274,7 +344,7 @@ class GestionDonacionesView(tk.Frame):
         self.combo_insumo = tb.Combobox(
             add_bar,
             state="readonly",
-            width=21,
+            width=20,
             font=("Segoe UI", 9),
             bootstyle="danger"
         )
@@ -323,7 +393,7 @@ class GestionDonacionesView(tk.Frame):
         self.tabla_carrito.column("unidad", width=110, anchor="center")
         self.tabla_carrito.tag_configure("par", background=PALETTE["blanco"])
         self.tabla_carrito.tag_configure("impar", background="#F9FAFB")
-        self.tabla_carrito.pack(fill=BOTH, expand=True, pady=(0, 6))
+        self.tabla_carrito.pack(fill="x", pady=(0, 6))
 
         btn_quitar_item = tk.Button(
             self.frame_material,
@@ -340,52 +410,17 @@ class GestionDonacionesView(tk.Frame):
         )
         btn_quitar_item.pack(anchor="e")
 
-        # Observaciones y Botones Inferiores
+        # Observaciones dentro del área desplazable
         tk.Label(
             br,
-            text="Observaciones (Opcional)",
+            text="Observaciones ",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
         ).pack(anchor="w")
 
         self.entry_obs = tb.Entry(br, font=("Segoe UI", 9))
-        self.entry_obs.pack(fill="x", ipady=3, pady=(3, 12))
-
-        btns_bottom = tk.Frame(br, bg=PALETTE["blanco"])
-        btns_bottom.pack(fill="x")
-
-        btn_limpiar = tk.Button(
-            btns_bottom,
-            text="Limpiar",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["negro"],
-            activebackground=PALETTE["plomo_borde"],
-            bd=0,
-            padx=16,
-            pady=9,
-            cursor="hand2",
-            command=self._limpiar_todo
-        )
-        btn_limpiar.pack(side="left", padx=(0, 10))
-
-        btn_guardar = tk.Button(
-            btns_bottom,
-            text="✓  Registrar Donación",
-            font=("Segoe UI", 10, "bold"),
-            bg=PALETTE["rojo"],
-            fg=PALETTE["blanco"],
-            activebackground=PALETTE["rojo_hover"],
-            activeforeground=PALETTE["blanco"],
-            bd=0,
-            pady=9,
-            cursor="hand2",
-            command=self._guardar_donacion
-        )
-        btn_guardar.pack(side="right", fill="x", expand=True)
-        btn_guardar.bind("<Enter>", lambda _e: btn_guardar.config(bg=PALETTE["rojo_hover"]))
-        btn_guardar.bind("<Leave>", lambda _e: btn_guardar.config(bg=PALETTE["rojo"]))
+        self.entry_obs.pack(fill="x", ipady=3, pady=(3, 10))
 
         # =====================================================================
         # PANEL DERECHO: HISTORIAL Y DESGLOSE DE DONACIONES
@@ -396,7 +431,7 @@ class GestionDonacionesView(tk.Frame):
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=20,
-            pady=18,
+            pady=16,
             expand_body=True
         )
         card_hist.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
@@ -441,6 +476,7 @@ class GestionDonacionesView(tk.Frame):
             bh,
             columns=cols,
             show="headings",
+            height=8,
             style="Don.Treeview"
         )
         self.tabla_hist.heading("fecha", text="Fecha")
@@ -471,6 +507,17 @@ class GestionDonacionesView(tk.Frame):
             anchor="w"
         )
         self.lbl_detalle_don.pack(fill="x")
+
+    def _on_mousewheel_reg(self, event):
+        if hasattr(self, "canvas_reg") and self.canvas_reg.winfo_exists():
+            self.canvas_reg.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _desvincular_rueda(self):
+        try:
+            if hasattr(self, "canvas_reg") and self.canvas_reg.winfo_exists():
+                self.canvas_reg.unbind_all("<MouseWheel>")
+        except Exception:
+            pass
 
     @staticmethod
     def _asignar_texto_seguro(entry_widget, texto: str):
@@ -516,9 +563,14 @@ class GestionDonacionesView(tk.Frame):
         self.frame_material.pack_forget()
 
         if tipo == "DINERO":
-            self.frame_dinero.pack(fill=BOTH, expand=True)
+            self.frame_dinero.pack(fill="x")
         elif tipo == "MATERIAL":
-            self.frame_material.pack(fill=BOTH, expand=True)
+            self.frame_material.pack(fill="x")
+
+        if hasattr(self, "canvas_reg") and self.canvas_reg.winfo_exists():
+            self.canvas_reg.update_idletasks()
+            self.canvas_reg.configure(scrollregion=self.canvas_reg.bbox("all"))
+            self.canvas_reg.yview_moveto(0)
 
     def _buscar_donante(self):
         doc = self.entry_doc.get().strip()
@@ -595,6 +647,8 @@ class GestionDonacionesView(tk.Frame):
             entry.delete(0, tk.END)
         self.carrito_insumos.clear()
         self._refrescar_tabla_carrito()
+        if hasattr(self, "canvas_reg") and self.canvas_reg.winfo_exists():
+            self.canvas_reg.yview_moveto(0)
 
     def _guardar_donacion(self):
         datos_donante = {

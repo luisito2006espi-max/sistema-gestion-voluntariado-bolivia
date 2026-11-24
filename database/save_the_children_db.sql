@@ -231,8 +231,7 @@ CREATE TABLE `metodo_pago` (
 INSERT INTO `metodo_pago` (`id_metodo_pago`, `nombre`) VALUES
 (3, 'Efectivo'),
 (1, 'QR'),
-(2, 'Tarjeta'),
-(4, 'Transferencia');
+(2, 'Transferencia');
 
 -- --------------------------------------------------------
 

@@ -9,7 +9,7 @@ class Database:
         "port": 3306,
         "user": "root",
         "password": "",              # En XAMPP por defecto va vacío
-        "database": "save_the_children_db",  # <-- Reemplaza por el nombre exacto de tu BD
+        "database": "save_the_children_bolivia_db",  # <-- Reemplaza por el nombre exacto de tu BD
         "autocommit": False
     }
 

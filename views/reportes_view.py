@@ -69,23 +69,15 @@ class ReportesRendimientoView(tk.Frame):
         # 1. ENCABEZADO + BOTÓN EXPORTAR EXCEL
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 12))
+        header.pack(fill="x", pady=(0, 6))
 
         titulos_frame = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         titulos_frame.pack(side="left")
 
         tk.Label(
             titulos_frame,
-            text="SAVE THE CHILDREN BOLIVIA  •  INTELIGENCIA OPERATIVA",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            titulos_frame,
             text="Reportes Estadísticos y Rendimiento",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -128,7 +120,7 @@ class ReportesRendimientoView(tk.Frame):
             pady=11,
             expand_body=False
         )
-        filtro_card.pack(fill="x", pady=(0, 12))
+        filtro_card.pack(fill="x", pady=(0, 8))
 
         fb = filtro_card.body
 
@@ -349,7 +341,7 @@ class ReportesRendimientoView(tk.Frame):
         card_g1 = RoundedCard(
             top_charts, radius=18, bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"], padx=10, pady=10,
-            expand_body=True, height=245
+            expand_body=True, height=195
         )
         card_g1.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         top_8 = [r for r in rend if r["total_horas"] > 0][:8]
@@ -364,7 +356,7 @@ class ReportesRendimientoView(tk.Frame):
         card_g2 = RoundedCard(
             top_charts, radius=18, bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"], padx=10, pady=10,
-            expand_body=True, height=245
+            expand_body=True, height=195
         )
         card_g2.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._grafico_pastel(
@@ -433,7 +425,7 @@ class ReportesRendimientoView(tk.Frame):
         card_g1 = RoundedCard(
             top_charts, radius=18, bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"], padx=10, pady=10,
-            expand_body=True, height=245
+            expand_body=True, height=195
         )
         card_g1.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self._grafico_linea_tiempo(
@@ -447,7 +439,7 @@ class ReportesRendimientoView(tk.Frame):
         card_g2 = RoundedCard(
             top_charts, radius=18, bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"], padx=10, pady=10,
-            expand_body=True, height=245
+            expand_body=True, height=195
         )
         card_g2.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._grafico_pastel(
@@ -503,7 +495,7 @@ class ReportesRendimientoView(tk.Frame):
         card_g1 = RoundedCard(
             top_charts, radius=18, bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"], padx=10, pady=10,
-            expand_body=True, height=245
+            expand_body=True, height=195
         )
         card_g1.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         self._grafico_linea_tiempo(
@@ -517,7 +509,7 @@ class ReportesRendimientoView(tk.Frame):
         card_g2 = RoundedCard(
             top_charts, radius=18, bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"], padx=10, pady=10,
-            expand_body=True, height=245
+            expand_body=True, height=195
         )
         card_g2.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
         self._grafico_pastel(

@@ -24,6 +24,11 @@ class MainWindow(tb.Frame):
         self.botones_menu = {}
         self.opcion_actual = ""
 
+        try:
+            self.master.state("zoomed")
+        except Exception:
+            pass
+
         self.pack(fill=BOTH, expand=True)
         self._construir_ui()
 
@@ -33,7 +38,7 @@ class MainWindow(tb.Frame):
         # =====================================================================
         tk.Frame(self, bg=PALETTE["rojo"], height=4).pack(fill="x")
 
-        top_header = tk.Frame(self, bg=PALETTE["negro"], padx=24, pady=10)
+        top_header = tk.Frame(self, bg=PALETTE["negro"], padx=20, pady=6)
         top_header.pack(fill="x")
 
         # Marca izquierda: Logo + Título
@@ -109,7 +114,7 @@ class MainWindow(tb.Frame):
         # =====================================================================
         # 2. BARRA HORIZONTAL DE PESTAÑAS (MISMO NOMBRE EN CADA MÓDULO)
         # =====================================================================
-        nav_bar = tk.Frame(self, bg=PALETTE["blanco"], padx=18, pady=7)
+        nav_bar = tk.Frame(self, bg=PALETTE["blanco"], padx=16, pady=4)
         nav_bar.pack(fill="x")
 
         tk.Frame(self, bg=PALETTE["plomo_borde"], height=1).pack(fill="x")
@@ -139,7 +144,7 @@ class MainWindow(tb.Frame):
         # =====================================================================
         # 3. ÁREA CENTRAL DE CONTENIDO
         # =====================================================================
-        self.area_contenido = tk.Frame(self, bg=PALETTE["plomo_fondo"], padx=26, pady=20)
+        self.area_contenido = tk.Frame(self, bg=PALETTE["plomo_fondo"], padx=18, pady=10)
         self.area_contenido.pack(fill=BOTH, expand=True)
 
         self._navegar(opciones_menu[0])

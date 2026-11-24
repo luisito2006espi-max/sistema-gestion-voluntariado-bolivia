@@ -55,23 +55,15 @@ class AuditoriaAccesosView(tk.Frame):
         # 1. ENCABEZADO (20 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
+        header.pack(fill="x", pady=(0, 8))
 
         titulos = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         titulos.pack(side="left", fill="x", expand=True)
 
         tk.Label(
             titulos,
-            text="SAVE THE CHILDREN BOLIVIA  •  SEGURIDAD Y CONTROL",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            titulos,
             text="Auditoría y Trazabilidad de Accesos",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -114,7 +106,7 @@ class AuditoriaAccesosView(tk.Frame):
             pady=12,
             expand_body=False
         )
-        filtro_card.pack(fill="x", pady=(0, 12))
+        filtro_card.pack(fill="x", pady=(0, 8))
 
         fb = filtro_card.body
 

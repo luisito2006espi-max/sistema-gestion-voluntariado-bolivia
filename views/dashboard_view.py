@@ -70,23 +70,15 @@ class DashboardView(tk.Frame):
         # 1. ENCABEZADO EJECUTIVO (Título principal en 22 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 18))
+        header.pack(fill="x", pady=(0, 8))
 
         izq_hdr = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         izq_hdr.pack(side="left", fill="x", expand=True)
 
         tk.Label(
             izq_hdr,
-            text="SAVE THE CHILDREN BOLIVIA  •  CENTRO DE OPERACIONES",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            izq_hdr,
             text=f"Panel General — ¡Hola, {self.sesion['nombre_mostrar']}!",
-            font=("Segoe UI", 22, "bold"),
+            font=("Segoe UI", 17, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -121,7 +113,7 @@ class DashboardView(tk.Frame):
         # 2. FILA DE 4 TARJETAS KPI CURVAS CON ACCESOS RÁPIDOS
         # =====================================================================
         kpi_grid = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        kpi_grid.pack(fill="x", pady=(0, 18))
+        kpi_grid.pack(fill="x", pady=(0, 10))
 
         self.kpi_post_val, self.kpi_post_sub = self._crear_tarjeta_kpi(
             kpi_grid,
@@ -213,7 +205,7 @@ class DashboardView(tk.Frame):
             card_act.body,
             columns=cols_act,
             show="headings",
-            height=9,
+            height=6,
             style="Dash.Treeview"
         )
         cfg_act = {
@@ -332,7 +324,7 @@ class DashboardView(tk.Frame):
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=18,
-            pady=16,
+            pady=10,
             expand_body=False
         )
         card.grid(row=0, column=col, sticky="nsew", padx=padx)
@@ -354,7 +346,7 @@ class DashboardView(tk.Frame):
         lbl_val = tk.Label(
             b,
             text="0",
-            font=("Segoe UI", 26, "bold"),
+            font=("Segoe UI", 20, "bold"),
             bg=PALETTE["blanco"],
             fg=color_acento,
             anchor="w"
@@ -369,7 +361,7 @@ class DashboardView(tk.Frame):
             fg=PALETTE["plomo_texto"],
             anchor="w"
         )
-        lbl_sub.pack(fill="x", pady=(0, 10))
+        lbl_sub.pack(fill="x", pady=(0, 6))
 
         btn_link = tk.Button(
             b,

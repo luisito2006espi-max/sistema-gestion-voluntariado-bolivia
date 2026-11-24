@@ -59,20 +59,12 @@ class GestionActividadesView(tk.Frame):
         # 1. ENCABEZADO (20 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
-
-        tk.Label(
-            header,
-            text="SAVE THE CHILDREN BOLIVIA  •  AGENDA OPERATIVA",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
+        header.pack(fill="x", pady=(0, 8))
 
         tk.Label(
             header,
             text="Gestión de Actividades Comunitarias",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -94,10 +86,10 @@ class GestionActividadesView(tk.Frame):
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=22,
-            pady=16,
+            pady=10,
             expand_body=False
         )
-        card_form.pack(fill="x", pady=(0, 14))
+        card_form.pack(fill="x", pady=(0, 8))
 
         bf = card_form.body
 
@@ -116,16 +108,16 @@ class GestionActividadesView(tk.Frame):
         # Fila 1: Nombre + Lugar
         tk.Label(bf, text="Nombre de la Actividad *", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=1, column=0, columnspan=2, sticky="w", padx=6)
         self.entry_nombre = tb.Entry(bf, font=("Segoe UI", 10))
-        self.entry_nombre.grid(row=2, column=0, columnspan=2, sticky="ew", padx=6, ipady=4, pady=(2, 8))
+        self.entry_nombre.grid(row=2, column=0, columnspan=2, sticky="ew", padx=6, ipady=4, pady=(2, 4))
 
         tk.Label(bf, text="Lugar / Punto de Encuentro *", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=1, column=2, columnspan=2, sticky="w", padx=6)
         self.entry_lugar = tb.Entry(bf, font=("Segoe UI", 10))
-        self.entry_lugar.grid(row=2, column=2, columnspan=2, sticky="ew", padx=6, ipady=4, pady=(2, 8))
+        self.entry_lugar.grid(row=2, column=2, columnspan=2, sticky="ew", padx=6, ipady=4, pady=(2, 4))
 
         # Fila 2: Fecha, Hora Inicio, Hora Fin, Cupo Máximo
         tk.Label(bf, text="Fecha *", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=3, column=0, sticky="w", padx=6)
         self.date_fecha = tb.DateEntry(bf, bootstyle="danger", dateformat="%Y-%m-%d")
-        self.date_fecha.grid(row=4, column=0, sticky="ew", padx=6, pady=(2, 8))
+        self.date_fecha.grid(row=4, column=0, sticky="ew", padx=6, pady=(2, 4))
 
         tk.Label(bf, text="Hora Inicio *", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=3, column=1, sticky="w", padx=6)
         horas_inicio = self.controller.generar_horas_inicio()
@@ -137,7 +129,7 @@ class GestionActividadesView(tk.Frame):
             bootstyle="danger"
         )
         self.combo_hora_ini.set("08:30")
-        self.combo_hora_ini.grid(row=4, column=1, sticky="ew", padx=6, pady=(2, 8))
+        self.combo_hora_ini.grid(row=4, column=1, sticky="ew", padx=6, pady=(2, 4))
         self.combo_hora_ini.bind("<<ComboboxSelected>>", lambda _e: self._actualizar_horas_fin())
 
         tk.Label(bf, text="Hora Fin (1h - 5h) *", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=3, column=2, sticky="w", padx=6)
@@ -147,7 +139,7 @@ class GestionActividadesView(tk.Frame):
             font=("Segoe UI", 10),
             bootstyle="danger"
         )
-        self.combo_hora_fin.grid(row=4, column=2, sticky="ew", padx=6, pady=(2, 8))
+        self.combo_hora_fin.grid(row=4, column=2, sticky="ew", padx=6, pady=(2, 4))
         self._actualizar_horas_fin("11:30")
 
         tk.Label(bf, text="Cupo Máximo (3 - 15) *", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=3, column=3, sticky="w", padx=6)
@@ -159,7 +151,7 @@ class GestionActividadesView(tk.Frame):
             bootstyle="danger"
         )
         self.combo_cupo.set("10")
-        self.combo_cupo.grid(row=4, column=3, sticky="ew", padx=6, pady=(2, 8))
+        self.combo_cupo.grid(row=4, column=3, sticky="ew", padx=6, pady=(2, 4))
 
         # Fila 3: Descripción + Botones
         tk.Label(bf, text="Descripción / Tareas a realizar", font=("Segoe UI", 9, "bold"), bg=PALETTE["blanco"], fg=PALETTE["negro"]).grid(row=5, column=0, columnspan=3, sticky="w", padx=6)
@@ -258,6 +250,7 @@ class GestionActividadesView(tk.Frame):
             bl,
             columns=columnas,
             show="headings",
+            height=6,
             style="Op.Treeview"
         )
         cols_cfg = {
@@ -494,20 +487,12 @@ class AsignarVoluntariosView(tk.Frame):
 
     def _construir_ui(self):
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
-
-        tk.Label(
-            header,
-            text="SAVE THE CHILDREN BOLIVIA  •  DESPLIEGUE DE EQUIPO",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
+        header.pack(fill="x", pady=(0, 8))
 
         tk.Label(
             header,
             text="Asignación de Voluntarios a Actividades",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -530,7 +515,7 @@ class AsignarVoluntariosView(tk.Frame):
             pady=12,
             expand_body=False
         )
-        selector_card.pack(fill="x", pady=(0, 14))
+        selector_card.pack(fill="x", pady=(0, 8))
 
         sb = selector_card.body
 
@@ -617,6 +602,7 @@ class AsignarVoluntariosView(tk.Frame):
             bi,
             columns=("ci", "nombre", "telefono"),
             show="headings",
+            height=8,
             style="Op.Treeview"
         )
         self.tabla_admitidos.heading("ci", text="CI")
@@ -684,6 +670,7 @@ class AsignarVoluntariosView(tk.Frame):
             bd,
             columns=("ci", "nombre", "estado"),
             show="headings",
+            height=8,
             style="Op.Treeview"
         )
         self.tabla_asignados.heading("ci", text="CI")

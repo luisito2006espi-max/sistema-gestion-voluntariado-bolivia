@@ -61,23 +61,15 @@ class ControlAsistenciaView(tk.Frame):
         # 1. ENCABEZADO (20 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
+        header.pack(fill="x", pady=(0, 8))
 
         izq = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         izq.pack(side="left", fill="x", expand=True)
 
         tk.Label(
             izq,
-            text="SAVE THE CHILDREN BOLIVIA  •  CERTIFICACIÓN DE HORAS",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            izq,
             text="Control de Asistencia y Horas Cumplidas",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -118,7 +110,7 @@ class ControlAsistenciaView(tk.Frame):
             pady=12,
             expand_body=False
         )
-        top_card.pack(fill="x", pady=(0, 12))
+        top_card.pack(fill="x", pady=(0, 8))
 
         tb_body = top_card.body
 
@@ -328,7 +320,7 @@ class ControlAsistenciaView(tk.Frame):
 
         self.txt_obs = tk.Text(
             bf,
-            height=4,
+            height=2,
             font=("Segoe UI", 9),
             bd=1,
             relief="solid"

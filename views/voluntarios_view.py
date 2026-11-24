@@ -24,20 +24,12 @@ class InscripcionVoluntarioView(tk.Frame):
         # 1. ENCABEZADO (20 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 16))
-
-        tk.Label(
-            header,
-            text="SAVE THE CHILDREN BOLIVIA  •  RECLUTAMIENTO",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
+        header.pack(fill="x", pady=(0, 8))
 
         tk.Label(
             header,
             text="Inscripción de Postulante a Voluntariado",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -66,7 +58,7 @@ class InscripcionVoluntarioView(tk.Frame):
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=26,
-            pady=22,
+            pady=14,
             expand_body=True
         )
         card_form.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
@@ -99,30 +91,30 @@ class InscripcionVoluntarioView(tk.Frame):
         # Fila 0: CI (Solo Números) | Nombres (Solo Letras)
         self.entry_ci = self._crear_campo(
             grid, row=0, col=0,
-            etiqueta="Carnet de Identidad (CI) *  [Solo números]",
+            etiqueta="Carnet de Identidad (CI) *  ",
             validacion="enteros"
         )
         self.entry_nombres = self._crear_campo(
             grid, row=0, col=1,
-            etiqueta="Nombres *  [Solo letras]",
+            etiqueta="Nombres *  ",
             validacion="letras"
         )
 
         # Fila 1: Apellido Paterno (Solo Letras) | Apellido Materno (Solo Letras)
         self.entry_ap_paterno = self._crear_campo(
             grid, row=1, col=0,
-            etiqueta="Apellido Paterno *  [Solo letras]",
+            etiqueta="Apellido Paterno *  ",
             validacion="letras"
         )
         self.entry_ap_materno = self._crear_campo(
             grid, row=1, col=1,
-            etiqueta="Apellido Materno (Opcional)  [Solo letras]",
+            etiqueta="Apellido Materno ",
             validacion="letras"
         )
 
         # Fila 2: Fecha de Nacimiento + Edad Calculada en Vivo | Teléfono (Solo Números)
         celda_fecha = tk.Frame(grid, bg=PALETTE["blanco"])
-        celda_fecha.grid(row=2, column=0, sticky="ew", padx=(0, 12), pady=(0, 14))
+        celda_fecha.grid(row=2, column=0, sticky="ew", padx=(0, 12), pady=(0, 8))
 
         tk.Label(
             celda_fecha,
@@ -164,24 +156,24 @@ class InscripcionVoluntarioView(tk.Frame):
 
         self.entry_telefono = self._crear_campo(
             grid, row=2, col=1,
-            etiqueta="Teléfono / Celular  [Solo números]",
+            etiqueta="Teléfono / Celular  ",
             validacion="enteros"
         )
 
         # Fila 3: Correo Electrónico | Dirección / Zona
         self.entry_correo = self._crear_campo(
             grid, row=3, col=0,
-            etiqueta="Correo Electrónico (Opcional)",
+            etiqueta="Correo Electrónico ",
             validacion=None
         )
         self.entry_direccion = self._crear_campo(
             grid, row=3, col=1,
-            etiqueta="Dirección / Zona de Residencia (Opcional)",
+            etiqueta="Dirección / Zona de Residencia ",
             validacion=None
         )
 
         # Barra inferior de botones
-        tk.Frame(b, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(10, 16))
+        tk.Frame(b, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(6, 10))
 
         btn_bar = tk.Frame(b, bg=PALETTE["blanco"])
         btn_bar.pack(fill="x")
@@ -226,7 +218,7 @@ class InscripcionVoluntarioView(tk.Frame):
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=20,
-            pady=22,
+            pady=14,
             expand_body=True
         )
         card_info.grid(row=0, column=1, sticky="nsew", padx=(12, 0))
@@ -278,7 +270,7 @@ class InscripcionVoluntarioView(tk.Frame):
     def _crear_campo(self, parent, row: int, col: int, etiqueta: str, validacion: str | None):
         padx = (0, 12) if col == 0 else (12, 0)
         celda = tk.Frame(parent, bg=PALETTE["blanco"])
-        celda.grid(row=row, column=col, sticky="ew", padx=padx, pady=(0, 14))
+        celda.grid(row=row, column=col, sticky="ew", padx=padx, pady=(0, 8))
 
         tk.Label(
             celda,
@@ -409,23 +401,15 @@ class AdmisionVoluntariosView(tk.Frame):
         # 1. ENCABEZADO (20 pt)
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 14))
+        header.pack(fill="x", pady=(0, 8))
 
         izq = tk.Frame(header, bg=PALETTE["plomo_fondo"])
         izq.pack(side="left", fill="x", expand=True)
 
         tk.Label(
             izq,
-            text="SAVE THE CHILDREN BOLIVIA  •  TALENTO HUMANO",
-            font=("Segoe UI", 9, "bold"),
-            bg=PALETTE["plomo_fondo"],
-            fg=PALETTE["rojo"]
-        ).pack(anchor="w")
-
-        tk.Label(
-            izq,
             text="Admisión y Control de Voluntarios",
-            font=("Segoe UI", 20, "bold"),
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(2, 2))
@@ -597,7 +581,7 @@ class AdmisionVoluntariosView(tk.Frame):
             bt,
             columns=cols,
             show="headings",
-            height=11,
+            height=8,
             style="Vol.Treeview"
         )
         cfg = {

@@ -374,17 +374,18 @@ class ReportesRendimientoView(tk.Frame):
         )
         card_tbl.pack(fill=BOTH, expand=True)
 
-        cols = ("ci", "voluntario", "estado", "asignadas", "asist", "faltas", "horas", "cumpl")
+        cols = ("ci", "voluntario", "estado", "asignadas", "asist", "faltas", "strikes", "horas", "cumpl")
         tbl = tb.Treeview(card_tbl.body, columns=cols, show="headings", height=6, style="Rep.Treeview")
         headers = {
-            "ci": ("CI", 90),
-            "voluntario": ("Voluntario", 210),
-            "estado": ("Estado", 85),
-            "asignadas": ("Asignadas", 80),
-            "asist": ("Asistió", 70),
-            "faltas": ("Faltó", 70),
-            "horas": ("Horas Totales", 95),
-            "cumpl": ("% Cumpl.", 80)
+            "ci": ("CI", 85),
+            "voluntario": ("Voluntario", 195),
+            "estado": ("Estado", 110),
+            "asignadas": ("Asignadas", 75),
+            "asist": ("Asistió", 65),
+            "faltas": ("Faltó", 65),
+            "strikes": ("Strikes", 65),
+            "horas": ("Horas Totales", 90),
+            "cumpl": ("% Cumpl.", 75)
         }
         for c, (txt, w) in headers.items():
             tbl.heading(c, text=txt)
@@ -402,6 +403,7 @@ class ReportesRendimientoView(tk.Frame):
                 r["actividades_asignadas"],
                 r["asistencias"],
                 r["inasistencias"],
+                f"{r['total_strikes']}/5",
                 f"{r['total_horas']:.2f}",
                 f"{r['porcentaje_cumplimiento']}%"
             ), tags=(tag,))

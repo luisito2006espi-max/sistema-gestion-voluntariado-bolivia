@@ -1,6 +1,7 @@
 import hashlib
 from mysql.connector import Error
 from config.database import Database
+from utils.security import encriptar_password, verificar_password
 
 
 class AuthModel:
@@ -9,19 +10,14 @@ class AuthModel:
 
     @staticmethod
     def hashear_password(password: str) -> str:
-        return hashlib.sha256(password.encode("utf-8")).hexdigest()
-
-    def _columnas_tabla(self, cursor, tabla: str) -> set[str]:
-        cursor.execute(f"SHOW COLUMNS FROM {tabla}")
-        return {
-            (f["Field"] if isinstance(f, dict) else f[0])
-            for f in cursor.fetchall()
-        }
+        """Delega el cifrado PBKDF2-HMAC-SHA256 a utils/security.py."""
+        return encriptar_password(password)
 
     def autenticar_usuario(self, usuario: str, password: str) -> dict | None:
         """
-        Valida credenciales en USUARIO + ROL.
-        Si el rol es Voluntario, verifica que su estado en VOLUNTARIO no sea 'Inactivo'.
+        Valida credenciales en USUARIO (esquema v1.3 FNBC).
+        Si el rol es Voluntario, verifica su estado (Admitido vs Inactivo / Inactivo_Definitivo)
+        y recupera su id_voluntario y strikes acumulados para la sesión.
         """
         conn = None
         cursor = None
@@ -29,23 +25,16 @@ class AuthModel:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            cols_usr = self._columnas_tabla(cursor, "USUARIO")
-            col_pass = "password_hash" if "password_hash" in cols_usr else (
-                "contrasena" if "contrasena" in cols_usr else "password"
-            )
-            select_activo = "u.activo," if "activo" in cols_usr else "1 AS activo,"
-
             cursor.execute(
-                f"""
+                """
                 SELECT 
-                    u.id_usuario,
-                    u.usuario,
-                    u.{col_pass} AS hash_guardado,
-                    {select_activo}
-                    r.nombre AS rol
-                FROM USUARIO u
-                INNER JOIN ROL r ON u.id_rol = r.id_rol
-                WHERE u.usuario = %s
+                    id_usuario,
+                    usuario,
+                    password_hash,
+                    rol,
+                    activo
+                FROM USUARIO
+                WHERE usuario = %s
                 LIMIT 1
                 """,
                 (usuario.strip(),)
@@ -57,37 +46,66 @@ class AuthModel:
             if int(fila["activo"]) == 0:
                 raise ValueError("Esta cuenta de usuario se encuentra desactivada.")
 
-            hash_ingresado = self.hashear_password(password)
-            if fila["hash_guardado"] not in (hash_ingresado, password):
+            hash_guardado = fila["password_hash"]
+            es_valida = verificar_password(password, hash_guardado)
+            if not es_valida:
+                sha256_legacy = hashlib.sha256(password.encode("utf-8")).hexdigest()
+                es_valida = (hash_guardado == sha256_legacy)
+
+            if not es_valida:
                 return None
 
             nombre_mostrar = fila["usuario"]
+            id_voluntario = None
+            strikes_actuales = 0
 
-            # Si es Voluntario, validar estado activo y obtener nombre real
             if fila["rol"] == "Voluntario":
                 cursor.execute(
                     """
                     SELECT 
+                        v.id_voluntario,
                         CONCAT_WS(' ', v.nombres, v.apellido_paterno) AS nombre_corto,
-                        ev.nombre AS estado_vol
+                        v.estado AS estado_vol,
+                        COALESCE(
+                            (SELECT SUM(s.cantidad_strikes)
+                             FROM STRIKE_VOLUNTARIO s
+                             WHERE s.id_voluntario = v.id_voluntario),
+                            0
+                        ) AS total_strikes
                     FROM VOLUNTARIO v
-                    INNER JOIN ESTADO_VOLUNTARIO ev ON v.id_estado_vol = ev.id_estado_vol
                     WHERE v.id_usuario = %s
                     LIMIT 1
                     """,
                     (fila["id_usuario"],)
                 )
                 vol = cursor.fetchone()
-                if vol:
-                    if vol["estado_vol"] == "Inactivo":
-                        raise ValueError("Tu cuenta de voluntario ha sido desactivada por el Administrador.")
-                    nombre_mostrar = vol["nombre_corto"]
+                if not vol:
+                    raise ValueError("La cuenta de usuario no está vinculada a ningún voluntario.")
+
+                if vol["estado_vol"] == "Inactivo_Definitivo":
+                    raise ValueError(
+                        "Tu cuenta fue desactivada de forma irreversible por acumular 5 strikes."
+                    )
+                if vol["estado_vol"] == "Inactivo":
+                    raise ValueError(
+                        "Tu cuenta de voluntario ha sido desactivada por el Administrador."
+                    )
+                if vol["estado_vol"] != "Admitido":
+                    raise ValueError(
+                        f"Tu estado actual ({vol['estado_vol']}) no permite ingresar al portal."
+                    )
+
+                nombre_mostrar = vol["nombre_corto"]
+                id_voluntario = vol["id_voluntario"]
+                strikes_actuales = int(vol["total_strikes"])
 
             return {
                 "id_usuario": fila["id_usuario"],
                 "usuario": fila["usuario"],
                 "rol": fila["rol"],
-                "nombre_mostrar": nombre_mostrar
+                "nombre_mostrar": nombre_mostrar,
+                "id_voluntario": id_voluntario,
+                "strikes_actuales": strikes_actuales
             }
         except Error as e:
             raise RuntimeError(f"Error de conexión al validar usuario: {e}")
@@ -98,7 +116,7 @@ class AuthModel:
                 conn.close()
 
     def registrar_auditoria_acceso(self, id_usuario: int):
-        """Flujo 1: Registra el acceso en AUDITORIA_ACCESO dejando que MySQL ponga fecha_hora_acceso."""
+        """Registra el inicio de sesión en AUDITORIA_ACCESO."""
         conn = None
         cursor = None
         try:
@@ -131,14 +149,13 @@ class AuthModel:
                 SELECT 
                     aa.fecha_hora_acceso,
                     u.usuario,
-                    r.nombre AS rol,
+                    u.rol,
                     COALESCE(
                         CONCAT_WS(' ', v.nombres, v.apellido_paterno, v.apellido_materno),
                         u.usuario
                     ) AS persona
                 FROM AUDITORIA_ACCESO aa
                 INNER JOIN USUARIO u ON aa.id_usuario = u.id_usuario
-                INNER JOIN ROL r ON u.id_rol = r.id_rol
                 LEFT JOIN VOLUNTARIO v ON v.id_usuario = u.id_usuario
                 ORDER BY aa.fecha_hora_acceso DESC
                 LIMIT %s

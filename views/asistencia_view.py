@@ -8,7 +8,7 @@ from views.ui_components import PALETTE, RoundedCard
 
 class ControlAsistenciaView(tk.Frame):
     """
-    Vista para Administrador: Control de asistencia por Hora de Llegada y Partida.
+    Vista para Administrador: Control de asistencia por Hora de Entrada y Salida (FNBC).
     Solo permite registrar/modificar cuando la actividad está en estado 'Finalizada'.
     """
 
@@ -58,7 +58,7 @@ class ControlAsistenciaView(tk.Frame):
 
     def _construir_ui(self):
         # =====================================================================
-        # 1. ENCABEZADO (20 pt)
+        # 1. ENCABEZADO
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         header.pack(fill="x", pady=(0, 8))
@@ -76,7 +76,7 @@ class ControlAsistenciaView(tk.Frame):
 
         tk.Label(
             izq,
-            text="Registra la hora de llegada y partida una vez finalizada la actividad (acotado al horario programado).",
+            text="Registra la hora de entrada y salida una vez finalizada la actividad (acotado al horario programado).",
             font=("Segoe UI", 10),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["plomo_texto"]
@@ -158,15 +158,15 @@ class ControlAsistenciaView(tk.Frame):
         # =====================================================================
         # 3. CUERPO DIVIDIDO: PLANILLA IZQUIERDA + REGISTRO INDIVIDUAL DERECHA
         # =====================================================================
-        cuerpo = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        cuerpo.pack(fill=BOTH, expand=True)
-        cuerpo.columnconfigure(0, weight=62)
-        cuerpo.columnconfigure(1, weight=38)
-        cuerpo.rowconfigure(0, weight=1)
+        self.cuerpo = tk.Frame(self, bg=PALETTE["plomo_fondo"])
+        self.cuerpo.pack(fill=BOTH, expand=True)
+        self.cuerpo.columnconfigure(0, weight=62)
+        self.cuerpo.columnconfigure(1, weight=38)
+        self.cuerpo.rowconfigure(0, weight=1)
 
         # --- PANEL IZQUIERDO: PLANILLA ---
         tabla_card = RoundedCard(
-            cuerpo,
+            self.cuerpo,
             radius=20,
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
@@ -197,7 +197,7 @@ class ControlAsistenciaView(tk.Frame):
             "ci": ("CI", 85),
             "nombre": ("Voluntario", 175),
             "estado_asis": ("Asistencia", 90),
-            "rango": ("Llegada - Partida", 115),
+            "rango": ("Entrada - Salida", 115),
             "horas": ("Horas", 65),
             "obs": ("Observaciones", 145)
         }
@@ -212,7 +212,7 @@ class ControlAsistenciaView(tk.Frame):
 
         # --- PANEL DERECHO: REGISTRO INDIVIDUAL ---
         form_card = RoundedCard(
-            cuerpo,
+            self.cuerpo,
             radius=20,
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
@@ -256,7 +256,7 @@ class ControlAsistenciaView(tk.Frame):
         )
         self.chk_asistio.pack(anchor="w", pady=(0, 12))
 
-        # Fila de Hora de Llegada y Hora de Partida
+        # Fila de Hora de Entrada y Hora de Salida
         horas_grid = tk.Frame(bf, bg=PALETTE["blanco"])
         horas_grid.pack(fill="x", pady=(0, 8))
         horas_grid.columnconfigure(0, weight=1, uniform="h_cols")
@@ -264,7 +264,7 @@ class ControlAsistenciaView(tk.Frame):
 
         tk.Label(
             horas_grid,
-            text="Hora de Llegada *",
+            text="Hora de Entrada *",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -281,7 +281,7 @@ class ControlAsistenciaView(tk.Frame):
 
         tk.Label(
             horas_grid,
-            text="Hora de Partida *",
+            text="Hora de Salida *",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -356,7 +356,6 @@ class ControlAsistenciaView(tk.Frame):
 
             self.combo_actividad["values"] = etiquetas
             if etiquetas:
-                # Priorizar seleccionar una actividad 'Finalizada' si existe
                 finalizadas = [e for e in etiquetas if e.startswith("[Finalizada]")]
                 self.combo_actividad.set(finalizadas[0] if finalizadas else etiquetas[0])
                 self._al_cambiar_actividad()
@@ -377,7 +376,6 @@ class ControlAsistenciaView(tk.Frame):
             text=f"Horario: {act['hora_inicio_str']} a {act['hora_fin_str']}  (Máx: {duracion_max:.2f} hrs)"
         )
 
-        # Inicializar opciones de llegada y partida acotadas al horario de la actividad
         llegadas = self.controller.generar_horas_llegada(act["hora_inicio_str"], act["hora_fin_str"])
         self.combo_llegada["values"] = llegadas
         if llegadas:
@@ -406,14 +404,14 @@ class ControlAsistenciaView(tk.Frame):
             )
             self._al_cambiar_check_asistio()
         else:
-            estado_act = self.actividad_actual.get("estado", "Pendiente")
+            estado_act = self.actividad_actual.get("estado", "Programada")
             self.lbl_aviso_estado.config(
                 text=(
                     f"🔒  Actividad '{estado_act}': No se permite marcar asistencia ni modificar horas "
                     f"mientras la jornada no haya finalizado ({self.actividad_actual['hora_fin_str']})."
                 )
             )
-            self.lbl_aviso_estado.pack(fill="x", pady=(0, 10), before=self.master.winfo_children()[-1] if False else None)
+            self.lbl_aviso_estado.pack(fill="x", pady=(0, 8), before=self.cuerpo)
             self.chk_asistio.config(state="disabled")
             self.combo_llegada.config(state="disabled")
             self.combo_partida.config(state="disabled")
@@ -461,6 +459,14 @@ class ControlAsistenciaView(tk.Frame):
             fg="#15803D"
         )
 
+    def _extraer_horas_y_obs(self, row: dict) -> tuple[str | None, str | None, str]:
+        """Prioriza columnas FNBC (hora_entrada_str / hora_salida_str) con respaldo legacy."""
+        h_ent = row.get("hora_entrada_str")
+        h_sal = row.get("hora_salida_str")
+        if h_ent and h_sal:
+            return h_ent, h_sal, (row.get("observaciones") or "").strip()
+        return self.controller.extraer_horario_observaciones(row.get("observaciones"))
+
     def _cargar_planilla(self):
         for item in self.tabla.get_children():
             self.tabla.delete(item)
@@ -476,9 +482,7 @@ class ControlAsistenciaView(tk.Frame):
                 self.asignados_cache[iid] = row
                 tag = "par" if idx % 2 == 0 else "impar"
 
-                llegada_saved, partida_saved, obs_limpia = self.controller.extraer_horario_observaciones(
-                    row["observaciones"]
-                )
+                llegada_saved, partida_saved, obs_limpia = self._extraer_horas_y_obs(row)
 
                 if row["id_asistencia"] is None:
                     estado_txt = "Pendiente"
@@ -517,14 +521,16 @@ class ControlAsistenciaView(tk.Frame):
             return
 
         self.asignacion_seleccionada = row
+        strikes_act = int(row.get("total_strikes", 0))
         self.lbl_voluntario.config(
-            text=f"Voluntario: {row['nombre_completo']}\nCI: {row['ci']}  |  Tel: {row['telefono'] or 'N/A'}"
+            text=(
+                f"Voluntario: {row['nombre_completo']}\n"
+                f"CI: {row['ci']}  |  Tel: {row['telefono'] or 'N/A'}  |  Strikes: {strikes_act}/5"
+            )
         )
 
         es_finalizada = self.actividad_actual.get("estado") == "Finalizada"
-        llegada_saved, partida_saved, obs_limpia = self.controller.extraer_horario_observaciones(
-            row["observaciones"]
-        )
+        llegada_saved, partida_saved, obs_limpia = self._extraer_horas_y_obs(row)
 
         if row["id_asistencia"] is not None:
             asistio = bool(row["asistio"])
@@ -570,7 +576,8 @@ class ControlAsistenciaView(tk.Frame):
             asistio=self.var_asistio.get(),
             hora_llegada=self.combo_llegada.get(),
             hora_partida=self.combo_partida.get(),
-            observaciones=self.txt_obs.get("1.0", tk.END)
+            observaciones=self.txt_obs.get("1.0", tk.END),
+            id_admin_registra=self.sesion.get("id_usuario")
         )
         if not exito:
             messagebox.showwarning("Control de Asistencia", mensaje)

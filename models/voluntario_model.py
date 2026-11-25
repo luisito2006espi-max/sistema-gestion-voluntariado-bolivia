@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import mysql.connector
 from mysql.connector import Error
 from config.database import Database
@@ -7,39 +7,6 @@ from config.database import Database
 class VoluntarioModel:
     def __init__(self):
         self.db = Database()
-
-    def _columnas_tabla(self, cursor, tabla: str) -> set[str]:
-        cursor.execute(f"SHOW COLUMNS FROM {tabla}")
-        return {
-            (f["Field"] if isinstance(f, dict) else f[0])
-            for f in cursor.fetchall()
-        }
-
-    def obtener_columnas_voluntario(self) -> set[str]:
-        """Devuelve el conjunto de columnas reales existentes en la tabla VOLUNTARIO."""
-        conn = None
-        cursor = None
-        try:
-            conn = self.db.get_connection()
-            cursor = conn.cursor()
-            return self._columnas_tabla(cursor, "VOLUNTARIO")
-        except Error:
-            return set()
-        finally:
-            if cursor:
-                cursor.close()
-            if conn and conn.is_connected():
-                conn.close()
-
-    def _obtener_id_estado_vol(self, cursor, nombre_estado: str) -> int:
-        cursor.execute(
-            "SELECT id_estado_vol FROM ESTADO_VOLUNTARIO WHERE nombre = %s LIMIT 1",
-            (nombre_estado,)
-        )
-        fila = cursor.fetchone()
-        if not fila:
-            raise ValueError(f"El estado '{nombre_estado}' no existe en ESTADO_VOLUNTARIO.")
-        return fila["id_estado_vol"] if isinstance(fila, dict) else fila[0]
 
     @staticmethod
     def calcular_edad(fecha_nac: date) -> int:
@@ -59,54 +26,47 @@ class VoluntarioModel:
 
     def registrar_postulante(self, datos: dict):
         """
-        Inserta un postulante adaptándose dinámicamente a las columnas reales de VOLUNTARIO (v2.0).
-        - Envía None (NULL) en campos opcionales vacíos.
-        - No incluye fecha_creacion ni fecha_actualizacion (MySQL los asigna automáticamente).
+        Inserta un postulante en VOLUNTARIO (esquema v1.3 FNBC) con estado 'Postulante',
+        fecha_inscripcion con hora exacta y trazabilidad obligatoria de id_admin_registra.
         """
         conn = None
         cursor = None
         try:
             conn = self.db.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor()
 
-            cols = self._columnas_tabla(cursor, "VOLUNTARIO")
-            id_estado_post = self._obtener_id_estado_vol(cursor, "Postulante")
+            fecha_inscripcion = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-            campos = ["ci", "nombres", "apellido_paterno"]
-            valores = [datos["ci"], datos["nombres"], datos["apellido_paterno"]]
-
-            opcionales = [
-                ("apellido_materno", datos.get("apellido_materno")),
-                ("fecha_nacimiento", datos.get("fecha_nacimiento")),
-                ("telefono", datos.get("telefono")),
-                ("correo", datos.get("correo")),
-                ("direccion", datos.get("direccion")),
-                ("fecha_inscripcion", date.today()),
-            ]
-            for col_nombre, val in opcionales:
-                if col_nombre in cols:
-                    campos.append(col_nombre)
-                    valores.append(val)
-
-            campos.append("id_estado_vol")
-            valores.append(id_estado_post)
-
-            if "id_usuario" in cols:
-                campos.append("id_usuario")
-                valores.append(None)
-
-            if "fecha_admision" in cols:
-                campos.append("fecha_admision")
-                valores.append(None)
-
-            if "id_usuario_registra" in cols:
-                campos.append("id_usuario_registra")
-                valores.append(datos.get("id_usuario_registra"))
-
-            placeholders = ", ".join(["%s"] * len(campos))
             cursor.execute(
-                f"INSERT INTO VOLUNTARIO ({', '.join(campos)}) VALUES ({placeholders})",
-                tuple(valores)
+                """
+                INSERT INTO VOLUNTARIO (
+                    ci,
+                    nombres,
+                    apellido_paterno,
+                    apellido_materno,
+                    fecha_nacimiento,
+                    telefono,
+                    correo,
+                    direccion,
+                    estado,
+                    fecha_inscripcion,
+                    fecha_admision,
+                    id_usuario,
+                    id_admin_registra
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'Postulante', %s, NULL, NULL, %s)
+                """,
+                (
+                    datos["ci"],
+                    datos["nombres"],
+                    datos["apellido_paterno"],
+                    datos.get("apellido_materno"),
+                    datos["fecha_nacimiento"],
+                    datos["telefono"],
+                    datos.get("correo"),
+                    datos.get("direccion"),
+                    fecha_inscripcion,
+                    datos["id_admin_registra"]
+                )
             )
             conn.commit()
         except mysql.connector.IntegrityError as e:
@@ -126,69 +86,74 @@ class VoluntarioModel:
                 conn.close()
 
     def listar_voluntarios(self, filtro_estado: str = "Todos", busqueda: str = "") -> list[dict]:
-        """Consulta voluntarios verificando dinámicamente las columnas de VOLUNTARIO."""
+        """
+        Consulta voluntarios junto con su evaluación documental (1:1), cuenta de usuario
+        y strikes acumulados en STRIKE_VOLUNTARIO.
+        """
         conn = None
         cursor = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            cols = self._columnas_tabla(cursor, "VOLUNTARIO")
-
-            def col_o_null(nombre_col: str) -> str:
-                return f"v.{nombre_col}," if nombre_col in cols else f"NULL AS {nombre_col},"
-
-            sql = f"""
+            sql = """
                 SELECT 
                     v.id_voluntario,
                     v.ci,
                     v.nombres,
                     v.apellido_paterno,
-                    {col_o_null("apellido_materno")}
-                    CONCAT_WS(' ', v.nombres, v.apellido_paterno, {"v.apellido_materno" if "apellido_materno" in cols else "NULL"}) AS nombre_completo,
-                    {col_o_null("fecha_nacimiento")}
-                    {col_o_null("telefono")}
-                    {col_o_null("correo")}
-                    {col_o_null("direccion")}
-                    {col_o_null("fecha_inscripcion")}
-                    {col_o_null("fecha_admision")}
-                    {col_o_null("fecha_creacion")}
-                    {col_o_null("fecha_actualizacion")}
-                    ev.nombre AS estado,
-                    u.usuario AS cuenta_usuario
+                    v.apellido_materno,
+                    CONCAT_WS(' ', v.nombres, v.apellido_paterno, v.apellido_materno) AS nombre_completo,
+                    v.fecha_nacimiento,
+                    v.telefono,
+                    v.correo,
+                    v.direccion,
+                    v.estado,
+                    v.fecha_inscripcion,
+                    v.fecha_admision,
+                    v.id_usuario,
+                    u.usuario AS cuenta_usuario,
+                    ea.ci_presentado,
+                    ea.datos_verificados,
+                    ea.disponibilidad,
+                    ea.acepta_reglas,
+                    ea.antecedentes_presentado,
+                    ea.tiene_antecedentes,
+                    ea.cv_presentado,
+                    ea.nivel_educativo,
+                    ea.situacion_laboral,
+                    ea.resultado_automatico,
+                    ea.decision_final,
+                    ea.motivo_cambio,
+                    ea.fecha_evaluacion,
+                    COALESCE(
+                        (SELECT SUM(s.cantidad_strikes)
+                         FROM STRIKE_VOLUNTARIO s
+                         WHERE s.id_voluntario = v.id_voluntario),
+                        0
+                    ) AS total_strikes
                 FROM VOLUNTARIO v
-                INNER JOIN ESTADO_VOLUNTARIO ev ON v.id_estado_vol = ev.id_estado_vol
                 LEFT JOIN USUARIO u ON v.id_usuario = u.id_usuario
+                LEFT JOIN EVALUACION_ADMISION ea ON v.id_voluntario = ea.id_voluntario
                 WHERE 1=1
             """
             params = []
 
             if filtro_estado and filtro_estado != "Todos":
-                sql += " AND ev.nombre = %s"
+                sql += " AND v.estado = %s"
                 params.append(filtro_estado)
 
             if busqueda.strip():
-                if "apellido_materno" in cols:
-                    sql += """
-                        AND (
-                            v.ci LIKE %s OR
-                            v.nombres LIKE %s OR
-                            v.apellido_paterno LIKE %s OR
-                            v.apellido_materno LIKE %s
-                        )
-                    """
-                    term = f"%{busqueda.strip()}%"
-                    params.extend([term, term, term, term])
-                else:
-                    sql += """
-                        AND (
-                            v.ci LIKE %s OR
-                            v.nombres LIKE %s OR
-                            v.apellido_paterno LIKE %s
-                        )
-                    """
-                    term = f"%{busqueda.strip()}%"
-                    params.extend([term, term, term])
+                sql += """
+                    AND (
+                        v.ci LIKE %s OR
+                        v.nombres LIKE %s OR
+                        v.apellido_paterno LIKE %s OR
+                        v.apellido_materno LIKE %s
+                    )
+                """
+                term = f"%{busqueda.strip()}%"
+                params.extend([term, term, term, term])
 
             sql += " ORDER BY v.id_voluntario DESC"
             cursor.execute(sql, tuple(params))
@@ -203,14 +168,12 @@ class VoluntarioModel:
                     f["edad"] = None
                     f["fecha_nacimiento_str"] = "-"
 
-                f["fecha_creacion_str"] = (
-                    f["fecha_creacion"].strftime("%Y-%m-%d %H:%M")
-                    if f["fecha_creacion"] else "-"
+                fi = f.get("fecha_inscripcion")
+                f["fecha_inscripcion_str"] = (
+                    fi.strftime("%Y-%m-%d %H:%M:%S")
+                    if hasattr(fi, "strftime") else str(fi or "-")
                 )
-                f["fecha_actualizacion_str"] = (
-                    f["fecha_actualizacion"].strftime("%Y-%m-%d %H:%M")
-                    if f["fecha_actualizacion"] else "-"
-                )
+                f["total_strikes"] = int(f.get("total_strikes") or 0)
 
             return filas
         except Error as e:
@@ -221,10 +184,17 @@ class VoluntarioModel:
             if conn and conn.is_connected():
                 conn.close()
 
-    def admitir_voluntario_transaccion(self, id_voluntario: int, username: str, password_hash: str):
+    def guardar_evaluacion_y_procesar(
+        self,
+        id_voluntario: int,
+        evaluacion: dict,
+        username: str | None = None,
+        password_hash: str | None = None
+    ) -> dict:
         """
-        Crea cuenta en USUARIO y actualiza VOLUNTARIO con id_usuario, estado 'Admitido' y fecha_admision.
-        MySQL actualiza fecha_actualizacion automáticamente.
+        Registra o actualiza EVALUACION_ADMISION (1:1) y sincroniza VOLUNTARIO en una sola transacción:
+        - Si decision_final == 'Admitido': crea cuenta en USUARIO (si no tiene) y marca estado = 'Admitido'.
+        - Si decision_final == 'Rechazado': marca estado = 'Rechazado' y fecha_admision = NULL.
         """
         conn = None
         cursor = None
@@ -232,54 +202,129 @@ class VoluntarioModel:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            cols_usr = self._columnas_tabla(cursor, "USUARIO")
-            col_pass = "password_hash" if "password_hash" in cols_usr else (
-                "contrasena" if "contrasena" in cols_usr else "password"
-            )
-
-            cursor.execute("SELECT id_rol FROM ROL WHERE nombre = 'Voluntario' LIMIT 1")
-            rol_fila = cursor.fetchone()
-            if not rol_fila:
-                raise ValueError("El rol 'Voluntario' no existe en la tabla ROL.")
-
             cursor.execute(
-                f"INSERT INTO USUARIO (usuario, {col_pass}, id_rol) VALUES (%s, %s, %s)",
-                (username, password_hash, rol_fila["id_rol"])
+                "SELECT id_usuario, estado FROM VOLUNTARIO WHERE id_voluntario = %s LIMIT 1",
+                (id_voluntario,)
             )
-            nuevo_id_usuario = cursor.lastrowid
+            vol = cursor.fetchone()
+            if not vol:
+                raise ValueError("El postulante seleccionado no existe.")
 
-            id_estado_adm = self._obtener_id_estado_vol(cursor, "Admitido")
-            cols_vol = self._columnas_tabla(cursor, "VOLUNTARIO")
+            if vol["estado"] == "Inactivo_Definitivo":
+                raise ValueError("Este voluntario está en Inactivo_Definitivo (5 strikes) y no puede modificarse.")
 
-            if "fecha_admision" in cols_vol:
+            ahora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cursor.execute(
+                """
+                INSERT INTO EVALUACION_ADMISION (
+                    id_voluntario,
+                    ci_presentado,
+                    datos_verificados,
+                    disponibilidad,
+                    acepta_reglas,
+                    antecedentes_presentado,
+                    tiene_antecedentes,
+                    cv_presentado,
+                    nivel_educativo,
+                    situacion_laboral,
+                    resultado_automatico,
+                    decision_final,
+                    motivo_cambio,
+                    id_admin_evalua,
+                    fecha_evaluacion
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    ci_presentado = VALUES(ci_presentado),
+                    datos_verificados = VALUES(datos_verificados),
+                    disponibilidad = VALUES(disponibilidad),
+                    acepta_reglas = VALUES(acepta_reglas),
+                    antecedentes_presentado = VALUES(antecedentes_presentado),
+                    tiene_antecedentes = VALUES(tiene_antecedentes),
+                    cv_presentado = VALUES(cv_presentado),
+                    nivel_educativo = VALUES(nivel_educativo),
+                    situacion_laboral = VALUES(situacion_laboral),
+                    resultado_automatico = VALUES(resultado_automatico),
+                    decision_final = VALUES(decision_final),
+                    motivo_cambio = VALUES(motivo_cambio),
+                    id_admin_evalua = VALUES(id_admin_evalua),
+                    fecha_evaluacion = VALUES(fecha_evaluacion)
+                """,
+                (
+                    id_voluntario,
+                    int(evaluacion["ci_presentado"]),
+                    int(evaluacion["datos_verificados"]),
+                    evaluacion["disponibilidad"],
+                    int(evaluacion["acepta_reglas"]),
+                    int(evaluacion["antecedentes_presentado"]),
+                    int(evaluacion["tiene_antecedentes"]),
+                    int(evaluacion["cv_presentado"]),
+                    evaluacion["nivel_educativo"],
+                    evaluacion["situacion_laboral"],
+                    evaluacion["resultado_automatico"],
+                    evaluacion["decision_final"],
+                    evaluacion.get("motivo_cambio"),
+                    int(evaluacion["id_admin_evalua"]),
+                    ahora
+                )
+            )
+
+            cuenta_creada = False
+            usuario_asignado = None
+
+            if evaluacion["decision_final"] == "Admitido":
+                id_usuario_final = vol["id_usuario"]
+                if not id_usuario_final:
+                    if not username or not password_hash:
+                        raise ValueError("Faltan credenciales para crear la cuenta del voluntario.")
+                    cursor.execute(
+                        """
+                        INSERT INTO USUARIO (usuario, password_hash, rol, activo)
+                        VALUES (%s, %s, 'Voluntario', 1)
+                        """,
+                        (username, password_hash)
+                    )
+                    id_usuario_final = cursor.lastrowid
+                    cuenta_creada = True
+                    usuario_asignado = username
+                else:
+                    cursor.execute(
+                        "UPDATE USUARIO SET activo = 1 WHERE id_usuario = %s",
+                        (id_usuario_final,)
+                    )
+
                 cursor.execute(
                     """
                     UPDATE VOLUNTARIO
                     SET id_usuario = %s,
-                        id_estado_vol = %s,
-                        fecha_admision = %s
+                        estado = 'Admitido',
+                        fecha_admision = COALESCE(fecha_admision, %s)
                     WHERE id_voluntario = %s
                     """,
-                    (nuevo_id_usuario, id_estado_adm, date.today(), id_voluntario)
+                    (id_usuario_final, date.today(), id_voluntario)
                 )
             else:
                 cursor.execute(
                     """
                     UPDATE VOLUNTARIO
-                    SET id_usuario = %s,
-                        id_estado_vol = %s
+                    SET estado = 'Rechazado',
+                        fecha_admision = NULL
                     WHERE id_voluntario = %s
                     """,
-                    (nuevo_id_usuario, id_estado_adm, id_voluntario)
+                    (id_voluntario,)
                 )
 
             conn.commit()
+            return {
+                "decision_final": evaluacion["decision_final"],
+                "cuenta_creada": cuenta_creada,
+                "usuario": usuario_asignado
+            }
         except mysql.connector.IntegrityError as e:
             if conn:
                 conn.rollback()
             if e.errno == 1062:
                 raise ValueError("El nombre de usuario generado ya existe. Intenta nuevamente.")
-            raise RuntimeError(f"Error de integridad al admitir voluntario: {e}")
+            raise RuntimeError(f"Error de integridad en la evaluación: {e}")
         except Exception as e:
             if conn:
                 conn.rollback()
@@ -291,32 +336,40 @@ class VoluntarioModel:
                 conn.close()
 
     def cambiar_estado_voluntario(self, id_voluntario: int, nuevo_estado: str):
-        """Cambia estado a 'Rechazado' o 'Inactivo'; MySQL actualiza fecha_actualizacion."""
+        """
+        Cambia estado entre 'Admitido' e 'Inactivo'.
+        Bloquea cualquier modificación si el voluntario está en 'Inactivo_Definitivo' (5 strikes).
+        """
         conn = None
         cursor = None
         try:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
 
-            id_estado = self._obtener_id_estado_vol(cursor, nuevo_estado)
             cursor.execute(
-                "UPDATE VOLUNTARIO SET id_estado_vol = %s WHERE id_voluntario = %s",
-                (id_estado, id_voluntario)
+                "SELECT estado, id_usuario FROM VOLUNTARIO WHERE id_voluntario = %s LIMIT 1",
+                (id_voluntario,)
+            )
+            vol = cursor.fetchone()
+            if not vol:
+                raise ValueError("El voluntario seleccionado no existe.")
+
+            if vol["estado"] == "Inactivo_Definitivo":
+                raise ValueError(
+                    "Acción denegada: este voluntario acumuló 5 strikes y su inactivación es irreversible."
+                )
+
+            cursor.execute(
+                "UPDATE VOLUNTARIO SET estado = %s WHERE id_voluntario = %s",
+                (nuevo_estado, id_voluntario)
             )
 
-            if nuevo_estado == "Inactivo":
-                cols_usr = self._columnas_tabla(cursor, "USUARIO")
-                if "activo" in cols_usr:
-                    cursor.execute(
-                        "SELECT id_usuario FROM VOLUNTARIO WHERE id_voluntario = %s",
-                        (id_voluntario,)
-                    )
-                    vol = cursor.fetchone()
-                    if vol and vol["id_usuario"]:
-                        cursor.execute(
-                            "UPDATE USUARIO SET activo = 0 WHERE id_usuario = %s",
-                            (vol["id_usuario"],)
-                        )
+            if vol["id_usuario"]:
+                activo_val = 1 if nuevo_estado == "Admitido" else 0
+                cursor.execute(
+                    "UPDATE USUARIO SET activo = %s WHERE id_usuario = %s",
+                    (activo_val, vol["id_usuario"])
+                )
 
             conn.commit()
         except Exception as e:
@@ -331,8 +384,8 @@ class VoluntarioModel:
 
     def obtener_metricas_dashboard(self) -> dict:
         """
-        Obtiene KPIs completos, horas acumuladas, próximas actividades y últimas donaciones
-        para el Panel General Ejecutivo (Esquema v2.0).
+        Obtiene KPIs completos, horas acumuladas (calculadas con TIMESTAMPDIFF),
+        próximas actividades y últimas donaciones (Esquema v1.3 FNBC).
         """
         resumen = {
             "postulantes": 0,
@@ -357,30 +410,40 @@ class VoluntarioModel:
             cursor.execute(
                 """
                 SELECT 
-                    SUM(CASE WHEN ev.nombre = 'Postulante' THEN 1 ELSE 0 END) AS postulantes,
-                    SUM(CASE WHEN ev.nombre = 'Admitido' THEN 1 ELSE 0 END) AS admitidos
-                FROM VOLUNTARIO v
-                INNER JOIN ESTADO_VOLUNTARIO ev ON v.id_estado_vol = ev.id_estado_vol
+                    SUM(CASE WHEN estado = 'Postulante' THEN 1 ELSE 0 END) AS postulantes,
+                    SUM(CASE WHEN estado = 'Admitido' THEN 1 ELSE 0 END) AS admitidos
+                FROM VOLUNTARIO
                 """
             )
             vols = cursor.fetchone() or {}
             resumen["postulantes"] = int(vols.get("postulantes") or 0)
             resumen["admitidos"] = int(vols.get("admitidos") or 0)
 
-            # 2. Total de Horas Cumplidas
-            cursor.execute("SELECT COALESCE(SUM(horas_cumplidas), 0) AS horas FROM ASISTENCIA")
+            # 2. Total de Horas Cumplidas (FNBC: calculadas desde hora_entrada y hora_salida)
+            cursor.execute(
+                """
+                SELECT COALESCE(
+                    SUM(
+                        CASE WHEN asistio = 1
+                        THEN TIMESTAMPDIFF(MINUTE, hora_entrada, hora_salida) / 60.0
+                        ELSE 0 END
+                    ),
+                    0
+                ) AS horas
+                FROM ASISTENCIA
+                """
+            )
             hrs = cursor.fetchone() or {}
-            resumen["horas_totales"] = float(hrs.get("horas") or 0.0)
+            resumen["horas_totales"] = round(float(hrs.get("horas") or 0.0), 2)
 
             # 3. KPIs de Actividades
             cursor.execute(
                 """
                 SELECT 
-                    COUNT(a.id_actividad) AS total,
-                    SUM(CASE WHEN ea.nombre = 'Programada' THEN 1 ELSE 0 END) AS programadas,
-                    SUM(CASE WHEN ea.nombre = 'En Curso' THEN 1 ELSE 0 END) AS en_curso
-                FROM ACTIVIDAD a
-                INNER JOIN ESTADO_ACTIVIDAD ea ON a.id_estado_actividad = ea.id_estado_actividad
+                    COUNT(id_actividad) AS total,
+                    SUM(CASE WHEN estado = 'Programada' THEN 1 ELSE 0 END) AS programadas,
+                    SUM(CASE WHEN estado = 'En Curso' THEN 1 ELSE 0 END) AS en_curso
+                FROM ACTIVIDAD
                 """
             )
             acts = cursor.fetchone() or {}
@@ -388,21 +451,21 @@ class VoluntarioModel:
             resumen["actividades_programadas"] = int(acts.get("programadas") or 0)
             resumen["actividades_en_curso"] = int(acts.get("en_curso") or 0)
 
-            # 4. KPIs de Donaciones (Monetarias y en Especie)
+            # 4. KPIs de Donaciones (Super-tipo DONACION + Sub-tipo DONACION_MONETARIA)
             cursor.execute(
                 """
                 SELECT 
-                    COALESCE(SUM(CASE WHEN td.nombre = 'DINERO' THEN d.monto ELSE 0 END), 0) AS total_dinero,
-                    SUM(CASE WHEN td.nombre = 'MATERIAL' THEN 1 ELSE 0 END) AS total_material
+                    COALESCE(SUM(CASE WHEN d.tipo_donacion = 'DINERO' THEN dm.monto ELSE 0 END), 0) AS total_dinero,
+                    SUM(CASE WHEN d.tipo_donacion = 'MATERIAL' THEN 1 ELSE 0 END) AS total_material
                 FROM DONACION d
-                INNER JOIN TIPO_DONACION td ON d.id_tipo_donacion = td.id_tipo_donacion
+                LEFT JOIN DONACION_MONETARIA dm ON d.id_donacion = dm.id_donacion
                 """
             )
             dons = cursor.fetchone() or {}
             resumen["total_dinero"] = float(dons.get("total_dinero") or 0.0)
             resumen["donaciones_material"] = int(dons.get("total_material") or 0)
 
-            # 5. Agenda Operativa: Próximas Actividades (Programadas o En Curso)
+            # 5. Agenda Operativa: Próximas Actividades
             cursor.execute(
                 """
                 SELECT 
@@ -412,17 +475,15 @@ class VoluntarioModel:
                     a.hora_fin,
                     a.lugar,
                     a.cupo_maximo,
-                    ea.nombre AS estado,
+                    a.estado,
                     (
                         SELECT COUNT(*)
                         FROM ASIGNACION asig
-                        INNER JOIN ESTADO_ASIGNACION eas ON asig.id_estado_asignacion = eas.id_estado_asignacion
                         WHERE asig.id_actividad = a.id_actividad
-                          AND eas.nombre != 'Cancelada'
+                          AND asig.estado IN ('Pendiente', 'Confirmada')
                     ) AS inscritos
                 FROM ACTIVIDAD a
-                INNER JOIN ESTADO_ACTIVIDAD ea ON a.id_estado_actividad = ea.id_estado_actividad
-                WHERE ea.nombre IN ('Programada', 'En Curso')
+                WHERE a.estado IN ('Programada', 'En Curso')
                 ORDER BY a.fecha ASC, a.hora_inicio ASC
                 LIMIT 6
                 """
@@ -437,10 +498,10 @@ class VoluntarioModel:
             cursor.execute(
                 """
                 SELECT 
-                    d.fecha_donacion,
+                    DATE(d.fecha_donacion) AS fecha_donacion,
                     don.nombre AS donante,
-                    td.nombre AS tipo,
-                    d.monto,
+                    d.tipo_donacion AS tipo,
+                    dm.monto,
                     (
                         SELECT COUNT(*)
                         FROM DONACION_DETALLE dd
@@ -448,7 +509,7 @@ class VoluntarioModel:
                     ) AS items_count
                 FROM DONACION d
                 INNER JOIN DONANTE don ON d.id_donante = don.id_donante
-                INNER JOIN TIPO_DONACION td ON d.id_tipo_donacion = td.id_tipo_donacion
+                LEFT JOIN DONACION_MONETARIA dm ON d.id_donacion = dm.id_donacion
                 ORDER BY d.id_donacion DESC
                 LIMIT 6
                 """

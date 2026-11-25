@@ -7,16 +7,20 @@ from views.ui_components import PALETTE, RoundedCard, InputValidators
 
 
 class GestionDonacionesView(tk.Frame):
-    """Vista para Administrador: Registro y control de donaciones monetarias y materiales."""
+    """
+    Vista para Administrador:
+    - Sub-pestaña 1: Registro e Historial de Donaciones (Monetarias y en Especie).
+    - Sub-pestaña 2: Inventario Disponible y Despacho de Insumos (ENTREGA_INSUMO).
+    """
 
     def __init__(self, master, sesion: dict):
         super().__init__(master, bg=PALETTE["plomo_fondo"])
         self.sesion = sesion
         self.controller = DonacionController()
 
-        self.tipos_map = {}
-        self.metodos_map = {}
         self.insumos_map = {}
+        self.insumos_inv_map = {}
+        self.actividades_map = {}
         self.carrito_insumos = []
         self.donaciones_cache = {}
 
@@ -26,7 +30,6 @@ class GestionDonacionesView(tk.Frame):
         self._inicializar_datos()
 
     def _configurar_estilos_tabla(self):
-        """Aplica el estilo limpio en plomo y negro igual al Panel General."""
         style = tb.Style()
         style.configure(
             "Don.Treeview",
@@ -61,48 +64,61 @@ class GestionDonacionesView(tk.Frame):
         # 1. ENCABEZADO
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
-        header.pack(fill="x", pady=(0, 10))
+        header.pack(fill="x", pady=(0, 8))
 
         tk.Label(
             header,
-            text="Gestión de Donaciones (Monetarias y en Especie)",
-            font=("Segoe UI", 17, "bold"),
+            text="Gestión de Donaciones e Inventario de Insumos",
+            font=("Segoe UI", 16, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
         ).pack(anchor="w")
 
         tk.Label(
             header,
-            text="Registra aportes económicos o entrega de insumos con trazabilidad completa del donante.",
+            text="Registra aportes económicos o en especie (incluyendo autodonaciones públicas) y controla las entregas de almacén.",
             font=("Segoe UI", 10),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["plomo_texto"]
         ).pack(anchor="w", pady=(2, 0))
 
         # =====================================================================
-        # 2. CUERPO DIVIDIDO EN DOS TARJETAS CURVAS
+        # 2. NOTEBOOK DE SUB-MÓDULOS (DONACIONES VS. INVENTARIO/ENTREGAS)
         # =====================================================================
-        cuerpo = tk.Frame(self, bg=PALETTE["plomo_fondo"])
+        self.notebook = tb.Notebook(self, bootstyle="danger")
+        self.notebook.pack(fill=BOTH, expand=True)
+
+        self.tab_donaciones = tk.Frame(self.notebook, bg=PALETTE["plomo_fondo"], pady=8)
+        self.tab_inventario = tk.Frame(self.notebook, bg=PALETTE["plomo_fondo"], pady=8)
+
+        self.notebook.add(self.tab_donaciones, text="  🎁  Registro e Historial de Donaciones  ")
+        self.notebook.add(self.tab_inventario, text="  📦  Inventario y Despacho de Insumos  ")
+
+        self._construir_tab_donaciones(self.tab_donaciones)
+        self._construir_tab_inventario(self.tab_inventario)
+
+    # =========================================================================
+    # SUB-PESTAÑA 1: REGISTRO E HISTORIAL DE DONACIONES
+    # =========================================================================
+    def _construir_tab_donaciones(self, parent):
+        cuerpo = tk.Frame(parent, bg=PALETTE["plomo_fondo"])
         cuerpo.pack(fill=BOTH, expand=True)
         cuerpo.columnconfigure(0, weight=48, uniform="don_cols")
         cuerpo.columnconfigure(1, weight=52, uniform="don_cols")
         cuerpo.rowconfigure(0, weight=1)
 
-        # =====================================================================
-        # PANEL IZQUIERDO: FORMULARIO DESPLAZABLE + BOTONES FIJOS AL PIE
-        # =====================================================================
+        # --- PANEL IZQUIERDO: FORMULARIO DESPLAZABLE + BOTONES FIJOS ---
         card_reg = RoundedCard(
             cuerpo,
             radius=20,
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=20,
-            pady=16,
+            pady=14,
             expand_body=True
         )
         card_reg.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
 
-        # Pie fijo con los botones principales (siempre visible)
         footer_reg = tk.Frame(card_reg.body, bg=PALETTE["blanco"])
         footer_reg.pack(side="bottom", fill="x", pady=(8, 0))
 
@@ -143,7 +159,6 @@ class GestionDonacionesView(tk.Frame):
         btn_guardar.bind("<Enter>", lambda _e: btn_guardar.config(bg=PALETTE["rojo_hover"]))
         btn_guardar.bind("<Leave>", lambda _e: btn_guardar.config(bg=PALETTE["rojo"]))
 
-        # Contenedor desplazable (Canvas + Scrollbar) para todos los campos
         scroll_wrap = tk.Frame(card_reg.body, bg=PALETTE["blanco"])
         scroll_wrap.pack(side="top", fill=BOTH, expand=True)
 
@@ -176,12 +191,10 @@ class GestionDonacionesView(tk.Frame):
             lambda e: self.canvas_reg.itemconfigure(self._reg_win_id, width=e.width)
         )
 
-        # Desplazamiento con rueda del ratón dentro del formulario
         scroll_wrap.bind("<Enter>", lambda _e: self.canvas_reg.bind_all("<MouseWheel>", self._on_mousewheel_reg))
         scroll_wrap.bind("<Leave>", lambda _e: self.canvas_reg.unbind_all("<MouseWheel>"))
         self.bind("<Destroy>", lambda _e: self._desvincular_rueda())
 
-        # --- Contenido dentro del área desplazable (br) ---
         tk.Label(
             br,
             text="1. Datos del Donante",
@@ -190,7 +203,6 @@ class GestionDonacionesView(tk.Frame):
             fg=PALETTE["negro"]
         ).pack(anchor="w", pady=(0, 8))
 
-        # Fila CI/NIT (Solo números) + Botón Buscar
         doc_row = tk.Frame(br, bg=PALETTE["blanco"])
         doc_row.pack(fill="x", pady=(0, 10))
 
@@ -225,10 +237,9 @@ class GestionDonacionesView(tk.Frame):
         btn_buscar.bind("<Enter>", lambda _e: btn_buscar.config(bg=PALETTE["rojo"], fg=PALETTE["blanco"]))
         btn_buscar.bind("<Leave>", lambda _e: btn_buscar.config(bg=PALETTE["plomo_fondo"], fg=PALETTE["negro"]))
 
-        # Nombre / Razón Social (Solo letras)
         tk.Label(
             br,
-            text="Nombre Completo o Razón Social *  ",
+            text="Nombre Completo o Razón Social *",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -238,7 +249,6 @@ class GestionDonacionesView(tk.Frame):
         self.entry_nombre.pack(fill="x", ipady=3, pady=(3, 10))
         InputValidators.aplicar(self.entry_nombre, "letras")
 
-        # Teléfono (Solo números) y Correo Electrónico en 2 columnas
         tel_mail_frame = tk.Frame(br, bg=PALETTE["blanco"])
         tel_mail_frame.pack(fill="x", pady=(0, 12))
         tel_mail_frame.columnconfigure(0, weight=1, uniform="tm_cols")
@@ -246,7 +256,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             tel_mail_frame,
-            text="Teléfono ",
+            text="Teléfono",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -267,10 +277,8 @@ class GestionDonacionesView(tk.Frame):
         self.entry_correo = tb.Entry(tel_mail_frame, font=("Segoe UI", 10))
         self.entry_correo.grid(row=1, column=1, sticky="ew", padx=(6, 0), ipady=3, pady=(3, 0))
 
-        # Separador en plomo claro
         tk.Frame(br, bg=PALETTE["plomo_borde"], height=1).pack(fill="x", pady=(2, 12))
 
-        # Sección 2: Tipo de Donación
         tipo_row = tk.Frame(br, bg=PALETTE["blanco"])
         tipo_row.pack(fill="x", pady=(0, 10))
 
@@ -284,15 +292,16 @@ class GestionDonacionesView(tk.Frame):
 
         self.combo_tipo = tb.Combobox(
             tipo_row,
+            values=list(self.controller.TIPOS_DONACION),
             state="readonly",
             width=18,
             font=("Segoe UI", 10, "bold"),
             bootstyle="danger"
         )
+        self.combo_tipo.set("DINERO")
         self.combo_tipo.pack(side="right")
         self.combo_tipo.bind("<<ComboboxSelected>>", lambda _e: self._alternar_panel_tipo())
 
-        # Contenedor dinámico en plomo neutro (cambia según DINERO o MATERIAL)
         self.contenedor_dinamico = tk.Frame(br, bg=PALETTE["plomo_fondo"], padx=14, pady=12)
         self.contenedor_dinamico.pack(fill="x", pady=(0, 10))
 
@@ -301,7 +310,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             self.frame_dinero,
-            text="Monto Donado (Bs.) *  ",
+            text="Monto Donado (Bs.) *",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
@@ -313,7 +322,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             self.frame_dinero,
-            text="Método de Pago *  ",
+            text="Método de Pago *",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"]
@@ -321,10 +330,12 @@ class GestionDonacionesView(tk.Frame):
 
         self.combo_metodo = tb.Combobox(
             self.frame_dinero,
+            values=list(self.controller.METODOS_PAGO),
             state="readonly",
             font=("Segoe UI", 10),
             bootstyle="danger"
         )
+        self.combo_metodo.set("QR")
         self.combo_metodo.pack(fill="x", ipady=3, pady=(3, 6))
 
         # --- Sub-panel B: MATERIAL ---
@@ -410,10 +421,9 @@ class GestionDonacionesView(tk.Frame):
         )
         btn_quitar_item.pack(anchor="e")
 
-        # Observaciones dentro del área desplazable
         tk.Label(
             br,
-            text="Observaciones ",
+            text="Observaciones",
             font=("Segoe UI", 9, "bold"),
             bg=PALETTE["blanco"],
             fg=PALETTE["negro"]
@@ -422,16 +432,14 @@ class GestionDonacionesView(tk.Frame):
         self.entry_obs = tb.Entry(br, font=("Segoe UI", 9))
         self.entry_obs.pack(fill="x", ipady=3, pady=(3, 10))
 
-        # =====================================================================
-        # PANEL DERECHO: HISTORIAL Y DESGLOSE DE DONACIONES
-        # =====================================================================
+        # --- PANEL DERECHO: HISTORIAL Y DESGLOSE DE DONACIONES ---
         card_hist = RoundedCard(
             cuerpo,
             radius=20,
             bg_color=PALETTE["blanco"],
             border_color=PALETTE["plomo_borde"],
             padx=20,
-            pady=16,
+            pady=14,
             expand_body=True
         )
         card_hist.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
@@ -454,7 +462,7 @@ class GestionDonacionesView(tk.Frame):
 
         tk.Label(
             tit_hist_box,
-            text="Selecciona un registro para ver el desglose completo",
+            text="Incluye registros administrativos y autodonaciones del portal público",
             font=("Segoe UI", 8),
             bg=PALETTE["blanco"],
             fg=PALETTE["plomo_texto"]
@@ -471,7 +479,7 @@ class GestionDonacionesView(tk.Frame):
         self.combo_filtro.pack(side="right", pady=2)
         self.combo_filtro.bind("<<ComboboxSelected>>", lambda _e: self._cargar_historial())
 
-        cols = ("fecha", "donante", "tipo", "detalle")
+        cols = ("fecha", "donante", "tipo", "origen", "detalle")
         self.tabla_hist = tb.Treeview(
             bh,
             columns=cols,
@@ -479,22 +487,23 @@ class GestionDonacionesView(tk.Frame):
             height=8,
             style="Don.Treeview"
         )
-        self.tabla_hist.heading("fecha", text="Fecha")
+        self.tabla_hist.heading("fecha", text="Fecha / Hora")
         self.tabla_hist.heading("donante", text="Donante")
         self.tabla_hist.heading("tipo", text="Tipo")
+        self.tabla_hist.heading("origen", text="Canal")
         self.tabla_hist.heading("detalle", text="Monto / Resumen")
 
-        self.tabla_hist.column("fecha", width=90, anchor="center")
-        self.tabla_hist.column("donante", width=180, anchor="w")
-        self.tabla_hist.column("tipo", width=85, anchor="center")
-        self.tabla_hist.column("detalle", width=165, anchor="w")
+        self.tabla_hist.column("fecha", width=110, anchor="center")
+        self.tabla_hist.column("donante", width=165, anchor="w")
+        self.tabla_hist.column("tipo", width=75, anchor="center")
+        self.tabla_hist.column("origen", width=95, anchor="center")
+        self.tabla_hist.column("detalle", width=155, anchor="w")
 
         self.tabla_hist.tag_configure("par", background=PALETTE["blanco"])
         self.tabla_hist.tag_configure("impar", background="#F9FAFB")
         self.tabla_hist.pack(fill=BOTH, expand=True, pady=(0, 12))
         self.tabla_hist.bind("<<TreeviewSelect>>", self._al_seleccionar_donacion)
 
-        # Caja inferior de detalle de la donación seleccionada
         self.lbl_detalle_don = tk.Label(
             bh,
             text="Selecciona una donación de la tabla para ver su desglose completo.",
@@ -508,6 +517,266 @@ class GestionDonacionesView(tk.Frame):
         )
         self.lbl_detalle_don.pack(fill="x")
 
+    # =========================================================================
+    # SUB-PESTAÑA 2: INVENTARIO DISPONIBLE Y DESPACHO DE INSUMOS
+    # =========================================================================
+    def _construir_tab_inventario(self, parent):
+        cuerpo = tk.Frame(parent, bg=PALETTE["plomo_fondo"])
+        cuerpo.pack(fill=BOTH, expand=True)
+        cuerpo.columnconfigure(0, weight=48, uniform="inv_cols")
+        cuerpo.columnconfigure(1, weight=52, uniform="inv_cols")
+        cuerpo.rowconfigure(0, weight=1)
+
+        # --- IZQUIERDA: SOLO INSUMOS REGISTRADOS CON CANTIDAD DISPONIBLE ---
+        card_stock = RoundedCard(
+            cuerpo,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=20,
+            pady=14,
+            expand_body=True
+        )
+        card_stock.grid(row=0, column=0, sticky="nsew", padx=(0, 10))
+
+        bs = card_stock.body
+
+        top_st = tk.Frame(bs, bg=PALETTE["blanco"])
+        top_st.pack(fill="x", pady=(0, 10))
+
+        tit_st_box = tk.Frame(top_st, bg=PALETTE["blanco"])
+        tit_st_box.pack(side="left")
+
+        tk.Label(
+            tit_st_box,
+            text="📊  Existencias Disponibles en Almacén",
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
+
+        tk.Label(
+            tit_st_box,
+            text="Muestra únicamente insumos registrados con stock disponible",
+            font=("Segoe UI", 8),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["plomo_texto"]
+        ).pack(anchor="w")
+
+        btn_ref_inv = tk.Button(
+            top_st,
+            text="↻ Actualizar",
+            font=("Segoe UI", 8, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"],
+            bd=0,
+            padx=10,
+            pady=5,
+            cursor="hand2",
+            command=self._refrescar_inventario_y_entregas
+        )
+        btn_ref_inv.pack(side="right")
+
+        cols_st = ("insumo", "unidad", "disponible")
+        self.tabla_stock = tb.Treeview(
+            bs,
+            columns=cols_st,
+            show="headings",
+            style="Don.Treeview"
+        )
+        self.tabla_stock.heading("insumo", text="Insumo Registrado")
+        self.tabla_stock.heading("unidad", text="Unidad")
+        self.tabla_stock.heading("disponible", text="Cantidad Disponible")
+
+        self.tabla_stock.column("insumo", width=230, anchor="w")
+        self.tabla_stock.column("unidad", width=120, anchor="center")
+        self.tabla_stock.column("disponible", width=130, anchor="center")
+
+        self.tabla_stock.tag_configure("par", background=PALETTE["blanco"])
+        self.tabla_stock.tag_configure("impar", background="#F9FAFB")
+        self.tabla_stock.pack(fill=BOTH, expand=True)
+
+        # --- DERECHA: FORMULARIO DE ENTREGA + HISTORIAL DE SALIDAS ---
+        card_desp = RoundedCard(
+            cuerpo,
+            radius=20,
+            bg_color=PALETTE["blanco"],
+            border_color=PALETTE["plomo_borde"],
+            padx=20,
+            pady=14,
+            expand_body=True
+        )
+        card_desp.grid(row=0, column=1, sticky="nsew", padx=(10, 0))
+
+        bd = card_desp.body
+
+        tk.Label(
+            bd,
+            text="🚚  Registrar Entrega / Despacho de Insumos",
+            font=("Segoe UI", 12, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(0, 8))
+
+        form_box = tk.Frame(bd, bg=PALETTE["plomo_fondo"], padx=14, pady=12)
+        form_box.pack(fill="x", pady=(0, 12))
+
+        # Paso 1: Tipo de destino (Fundación vs Otras Organizaciones)
+        r_dest_tipo = tk.Frame(form_box, bg=PALETTE["plomo_fondo"])
+        r_dest_tipo.pack(fill="x", pady=(0, 8))
+
+        tk.Label(
+            r_dest_tipo,
+            text="1. ¿Cuál es el destino de la entrega? *:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
+
+        self.combo_tipo_destino = tb.Combobox(
+            r_dest_tipo,
+            values=list(self.controller.TIPOS_DESTINO_DESPACHO),
+            state="readonly",
+            font=("Segoe UI", 9, "bold"),
+            bootstyle="danger"
+        )
+        self.combo_tipo_destino.set(self.controller.TIPOS_DESTINO_DESPACHO[0])
+        self.combo_tipo_destino.pack(fill="x", pady=(2, 0))
+        self.combo_tipo_destino.bind("<<ComboboxSelected>>", lambda _e: self._alternar_destino_despacho())
+
+        # Paso 2: Insumo disponible y cantidad
+        r1 = tk.Frame(form_box, bg=PALETTE["plomo_fondo"])
+        r1.pack(fill="x", pady=(0, 8))
+
+        tk.Label(
+            r1,
+            text="2. Insumo disponible *:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 6))
+
+        self.combo_insumo_desp = tb.Combobox(
+            r1,
+            state="readonly",
+            width=28,
+            font=("Segoe UI", 9),
+            bootstyle="danger"
+        )
+        self.combo_insumo_desp.pack(side="left", fill="x", expand=True, padx=(0, 10))
+
+        tk.Label(
+            r1,
+            text="Cantidad *:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(side="left", padx=(0, 6))
+
+        self.entry_cant_desp = tb.Entry(r1, width=9, font=("Segoe UI", 9, "bold"))
+        self.entry_cant_desp.pack(side="left")
+        InputValidators.aplicar(self.entry_cant_desp, "decimales")
+
+        # Contenedor dinámico según el destino seleccionado
+        self.box_destino_dinamico = tk.Frame(form_box, bg=PALETTE["plomo_fondo"])
+        self.box_destino_dinamico.pack(fill="x", pady=(0, 8))
+
+        # Sub-bloque A: Actividad de la Fundación
+        self.frame_dest_actividad = tk.Frame(self.box_destino_dinamico, bg=PALETTE["plomo_fondo"])
+
+        tk.Label(
+            self.frame_dest_actividad,
+            text="3. Actividad vinculada de la Fundación *:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
+
+        self.combo_actividad_desp = tb.Combobox(
+            self.frame_dest_actividad,
+            state="readonly",
+            font=("Segoe UI", 9),
+            bootstyle="danger"
+        )
+        self.combo_actividad_desp.pack(fill="x", pady=(2, 6))
+
+        tk.Label(
+            self.frame_dest_actividad,
+            text="Nota o detalle adicional de entrega (Opcional):",
+            font=("Segoe UI", 8, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["plomo_texto"]
+        ).pack(anchor="w")
+
+        self.entry_nota_actividad = tb.Entry(self.frame_dest_actividad, font=("Segoe UI", 9))
+        self.entry_nota_actividad.pack(fill="x", ipady=2, pady=(2, 0))
+
+        # Sub-bloque B: Otras Organizaciones (Hospitales, Escuelas, etc.)
+        self.frame_dest_externo = tk.Frame(self.box_destino_dinamico, bg=PALETTE["plomo_fondo"])
+
+        tk.Label(
+            self.frame_dest_externo,
+            text="3. Nombre de la Organización, Hospital, Escuela o Beneficiario *:",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["plomo_fondo"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w")
+
+        self.entry_destino_desp = tb.Entry(self.frame_dest_externo, font=("Segoe UI", 9))
+        self.entry_destino_desp.pack(fill="x", ipady=3, pady=(2, 0))
+
+        btn_despachar = tk.Button(
+            form_box,
+            text="✓  Confirmar Salida de Inventario",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            pady=8,
+            cursor="hand2",
+            command=self._registrar_despacho
+        )
+        btn_despachar.pack(fill="x")
+        btn_despachar.bind("<Enter>", lambda _e: btn_despachar.config(bg=PALETTE["rojo_hover"]))
+        btn_despachar.bind("<Leave>", lambda _e: btn_despachar.config(bg=PALETTE["rojo"]))
+
+        tk.Label(
+            bd,
+            text="Historial Reciente de Entregas (ENTREGA_INSUMO)",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"]
+        ).pack(anchor="w", pady=(0, 6))
+
+        cols_ent = ("fecha", "insumo", "cantidad", "destino")
+        self.tabla_entregas = tb.Treeview(
+            bd,
+            columns=cols_ent,
+            show="headings",
+            height=6,
+            style="Don.Treeview"
+        )
+        self.tabla_entregas.heading("fecha", text="Fecha / Hora")
+        self.tabla_entregas.heading("insumo", text="Insumo")
+        self.tabla_entregas.heading("cantidad", text="Cantidad")
+        self.tabla_entregas.heading("destino", text="Actividad / Destino")
+
+        self.tabla_entregas.column("fecha", width=110, anchor="center")
+        self.tabla_entregas.column("insumo", width=140, anchor="w")
+        self.tabla_entregas.column("cantidad", width=85, anchor="center")
+        self.tabla_entregas.column("destino", width=180, anchor="w")
+
+        self.tabla_entregas.tag_configure("par", background=PALETTE["blanco"])
+        self.tabla_entregas.tag_configure("impar", background="#F9FAFB")
+        self.tabla_entregas.pack(fill=BOTH, expand=True)
+
+        self._alternar_destino_despacho()
+
+    # =========================================================================
+    # EVENTOS Y LÓGICA DE INTERFAZ
+    # =========================================================================
     def _on_mousewheel_reg(self, event):
         if hasattr(self, "canvas_reg") and self.canvas_reg.winfo_exists():
             self.canvas_reg.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -521,7 +790,6 @@ class GestionDonacionesView(tk.Frame):
 
     @staticmethod
     def _asignar_texto_seguro(entry_widget, texto: str):
-        """Inserta texto cargado desde BD sin bloquearse si el registro antiguo tenía símbolos."""
         modo_anterior = entry_widget.cget("validate")
         entry_widget.configure(validate="none")
         entry_widget.delete(0, tk.END)
@@ -532,18 +800,6 @@ class GestionDonacionesView(tk.Frame):
         try:
             cats = self.controller.cargar_catalogos()
 
-            self.tipos_map = {t["nombre"]: t for t in cats["tipos"]}
-            tipos_nombres = list(self.tipos_map.keys())
-            self.combo_tipo["values"] = tipos_nombres
-            if tipos_nombres:
-                self.combo_tipo.set(tipos_nombres[0])
-
-            self.metodos_map = {m["nombre"]: m for m in cats["metodos"]}
-            metodos_nombres = list(self.metodos_map.keys())
-            self.combo_metodo["values"] = metodos_nombres
-            if metodos_nombres:
-                self.combo_metodo.set(metodos_nombres[0])
-
             self.insumos_map = {
                 f"{i['nombre']} ({i['unidad_medida']})": i for i in cats["insumos"]
             }
@@ -552,10 +808,32 @@ class GestionDonacionesView(tk.Frame):
             if insumos_labels:
                 self.combo_insumo.set(insumos_labels[0])
 
+            self.actividades_map = {}
+            for act in cats["actividades"]:
+                etiqueta = f"{act['nombre']} ({act['fecha']} - {act['estado']})"
+                self.actividades_map[etiqueta] = act
+            act_labels = list(self.actividades_map.keys())
+            self.combo_actividad_desp["values"] = act_labels
+            if act_labels:
+                self.combo_actividad_desp.set(act_labels[0])
+            else:
+                self.combo_actividad_desp.set("")
+
             self._alternar_panel_tipo()
             self._cargar_historial()
+            self._refrescar_inventario_y_entregas()
         except Exception as e:
             messagebox.showerror("Error de Catálogos", str(e))
+
+    def _alternar_destino_despacho(self):
+        tipo_dest = self.combo_tipo_destino.get()
+        self.frame_dest_actividad.pack_forget()
+        self.frame_dest_externo.pack_forget()
+
+        if tipo_dest == "Actividad de la Fundación":
+            self.frame_dest_actividad.pack(fill="x")
+        else:
+            self.frame_dest_externo.pack(fill="x")
 
     def _alternar_panel_tipo(self):
         tipo = self.combo_tipo.get().strip().upper()
@@ -657,26 +935,26 @@ class GestionDonacionesView(tk.Frame):
             "telefono": self.entry_tel.get(),
             "correo": self.entry_correo.get()
         }
-        tipo_obj = self.tipos_map.get(self.combo_tipo.get())
-        metodo_obj = self.metodos_map.get(self.combo_metodo.get())
 
-        exito, mensaje = self.controller.registrar_donacion(
+        exito, resultado = self.controller.registrar_donacion(
             datos_donante=datos_donante,
-            tipo_obj=tipo_obj,
+            tipo_nombre=self.combo_tipo.get(),
             monto_str=self.entry_monto.get(),
-            metodo_obj=metodo_obj,
+            metodo_pago=self.combo_metodo.get(),
             lista_insumos=self.carrito_insumos,
             observaciones=self.entry_obs.get(),
             id_usuario_registra=self.sesion["id_usuario"]
         )
 
         if not exito:
-            messagebox.showwarning("Validación de Donación", mensaje)
+            messagebox.showwarning("Validación de Donación", str(resultado))
             return
 
-        messagebox.showinfo("Donación Registrada", mensaje)
+        msg = resultado["mensaje"] if isinstance(resultado, dict) else str(resultado)
+        messagebox.showinfo("Donación Registrada", msg)
         self._limpiar_todo()
         self._cargar_historial()
+        self._refrescar_inventario_y_entregas()
 
     def _cargar_historial(self):
         for w in self.tabla_hist.get_children():
@@ -696,9 +974,10 @@ class GestionDonacionesView(tk.Frame):
                     resumen = f"{r['cantidad_items']} insumo(s) entregado(s)"
 
                 self.tabla_hist.insert("", tk.END, iid=iid, values=(
-                    str(r["fecha"]),
+                    r.get("fecha_hora_str", str(r["fecha"])),
                     r["donante"],
                     r["tipo_donacion"],
+                    r.get("origen", "Sistema"),
                     resumen
                 ), tags=(tag,))
         except Exception as e:
@@ -712,18 +991,102 @@ class GestionDonacionesView(tk.Frame):
         if not don:
             return
 
+        obs_txt = f"  |  Obs: {don['observaciones']}" if don.get("observaciones") else ""
+
         if don["tipo_donacion"].upper() == "DINERO":
             texto = (
-                f"👤 Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}\n"
-                f"💵 Tipo: DINERO  |  Método de Pago: {don['metodo_pago']}  |  Monto: Bs. {float(don['monto'] or 0):,.2f}"
+                f"👤 Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}  |  Canal: {don.get('origen', '-')}\n"
+                f"💵 Tipo: DINERO  |  Método: {don['metodo_pago']}  |  Monto: Bs. {float(don['monto'] or 0):,.2f}{obs_txt}"
             )
             self.lbl_detalle_don.config(text=texto)
         else:
             try:
                 items = self.controller.obtener_desglose_material(don["id_donacion"])
-                lineas = [f"👤 Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}  |  📦 Tipo: MATERIAL"]
+                lineas = [
+                    f"👤 Donante: {don['donante']}  |  CI/NIT: {don['documento'] or 'N/A'}  |  "
+                    f"📦 Tipo: MATERIAL ({don.get('origen', '-')}){obs_txt}"
+                ]
                 for it in items:
                     lineas.append(f"  • {it['insumo']}: {float(it['cantidad']):g} {it['unidad_medida']}")
                 self.lbl_detalle_don.config(text="\n".join(lineas))
             except Exception as e:
                 self.lbl_detalle_don.config(text=f"Error al cargar insumos: {e}")
+
+    def _refrescar_inventario_y_entregas(self):
+        try:
+            inventario = self.controller.obtener_inventario()
+            for w in self.tabla_stock.get_children():
+                self.tabla_stock.delete(w)
+
+            self.insumos_inv_map.clear()
+            labels_inv = []
+
+            # Solo reconocer y mostrar insumos registrados con cantidad disponible > 0
+            disponibles = [
+                item for item in inventario
+                if round(float(item.get("stock_disponible") or 0), 2) > 0
+            ]
+
+            for idx, item in enumerate(disponibles):
+                disp = round(float(item["stock_disponible"]), 2)
+                tag = "par" if idx % 2 == 0 else "impar"
+                self.tabla_stock.insert("", tk.END, values=(
+                    item["nombre"],
+                    item["unidad_medida"],
+                    f"{disp:g}"
+                ), tags=(tag,))
+
+                etiqueta = f"{item['nombre']} [Disp: {disp:g} {item['unidad_medida']}]"
+                self.insumos_inv_map[etiqueta] = item
+                labels_inv.append(etiqueta)
+
+            self.combo_insumo_desp["values"] = labels_inv
+            if labels_inv:
+                self.combo_insumo_desp.set(labels_inv[0])
+            else:
+                self.combo_insumo_desp.set("Sin insumos disponibles en almacén")
+
+            entregas = self.controller.obtener_historial_entregas()
+            for w in self.tabla_entregas.get_children():
+                self.tabla_entregas.delete(w)
+
+            for idx, ent in enumerate(entregas):
+                tag = "par" if idx % 2 == 0 else "impar"
+                dest = ent.get("destino") or ent.get("actividad") or "-"
+                self.tabla_entregas.insert("", tk.END, values=(
+                    ent["fecha_str"],
+                    ent["insumo"],
+                    f"{float(ent['cantidad']):g} {ent['unidad_medida']}",
+                    dest
+                ), tags=(tag,))
+        except Exception as e:
+            messagebox.showerror("Error de Inventario", str(e))
+
+    def _registrar_despacho(self):
+        tipo_destino = self.combo_tipo_destino.get()
+        insumo_obj = self.insumos_inv_map.get(self.combo_insumo_desp.get())
+
+        if tipo_destino == "Actividad de la Fundación":
+            actividad_obj = self.actividades_map.get(self.combo_actividad_desp.get())
+            destino_texto = self.entry_nota_actividad.get()
+        else:
+            actividad_obj = None
+            destino_texto = self.entry_destino_desp.get()
+
+        exito, mensaje = self.controller.registrar_entrega_insumo(
+            insumo_obj=insumo_obj,
+            cantidad_str=self.entry_cant_desp.get(),
+            tipo_destino=tipo_destino,
+            actividad_obj=actividad_obj,
+            destino=destino_texto,
+            id_usuario_entrega=self.sesion["id_usuario"]
+        )
+        if not exito:
+            messagebox.showwarning("Validación de Despacho", mensaje)
+            return
+
+        messagebox.showinfo("Entrega Registrada", mensaje)
+        self.entry_cant_desp.delete(0, tk.END)
+        self.entry_destino_desp.delete(0, tk.END)
+        self.entry_nota_actividad.delete(0, tk.END)
+        self._refrescar_inventario_y_entregas()

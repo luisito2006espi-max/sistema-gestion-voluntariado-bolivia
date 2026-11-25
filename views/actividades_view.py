@@ -56,7 +56,7 @@ class GestionActividadesView(tk.Frame):
 
     def _construir_ui(self):
         # =====================================================================
-        # 1. ENCABEZADO (20 pt)
+        # 1. ENCABEZADO
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         header.pack(fill="x", pady=(0, 8))
@@ -71,7 +71,7 @@ class GestionActividadesView(tk.Frame):
 
         tk.Label(
             header,
-            text="Las actividades pasan automáticamente a 'En Curso' al llegar su hora de inicio (duración permitida: 1 a 5 horas).",
+            text="Las actividades pasan automáticamente a 'En Curso' y 'Finalizada' según su horario (duración permitida: 1 a 5 horas).",
             font=("Segoe UI", 10),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["plomo_texto"]
@@ -318,7 +318,8 @@ class GestionActividadesView(tk.Frame):
             "hora_inicio": self.combo_hora_ini.get(),
             "hora_fin": self.combo_hora_fin.get(),
             "cupo_maximo": self.combo_cupo.get(),
-            "descripcion": self.entry_desc.get()
+            "descripcion": self.entry_desc.get(),
+            "id_admin_crea": self.sesion.get("id_usuario")
         }
 
         if self.actividad_en_edicion is not None:
@@ -468,6 +469,172 @@ class GestionActividadesView(tk.Frame):
         self._cargar_actividades()
 
 
+class ModalCancelarAsignacionStrike(tk.Toplevel):
+    """Modal para cancelar la asignación de un voluntario aplicando strikes en STRIKE_VOLUNTARIO."""
+
+    OPCIONES_PENALIDAD = {
+        "1 Strike — Cancelación o inasistencia sin aviso previo": 1,
+        "2 Strikes — Cancelación crítica de última hora": 2,
+        "0 Strikes — Cancelación justificada (sin penalización)": 0
+    }
+
+    def __init__(self, master, asignacion: dict, sesion: dict, controller: ActividadController, on_confirmado):
+        super().__init__(master)
+        self.asignacion = asignacion
+        self.sesion = sesion
+        self.controller = controller
+        self.on_confirmado = on_confirmado
+
+        self.title("Cancelar Asignación y Evaluar Strike")
+        self.configure(bg=PALETTE["plomo_fondo"])
+        self.resizable(False, False)
+        self.transient(master.winfo_toplevel())
+        self.grab_set()
+
+        self._construir_ui()
+        self._centrar()
+
+    def _centrar(self):
+        self.update_idletasks()
+        w = self.winfo_reqwidth()
+        h = self.winfo_reqheight()
+        x = max(20, (self.winfo_screenwidth() - w) // 2)
+        y = max(20, (self.winfo_screenheight() - h) // 2)
+        self.geometry(f"+{x}+{y}")
+
+    def _construir_ui(self):
+        wrap = tk.Frame(self, bg=PALETTE["plomo_fondo"], padx=18, pady=16)
+        wrap.pack(fill=BOTH, expand=True)
+
+        hdr = tk.Frame(wrap, bg=PALETTE["negro"], padx=14, pady=10)
+        hdr.pack(fill="x", pady=(0, 10))
+
+        tk.Label(
+            hdr,
+            text="Cancelación de Participación y Control de Strikes",
+            font=("Segoe UI", 11, "bold"),
+            bg=PALETTE["negro"],
+            fg=PALETTE["blanco"],
+            anchor="w"
+        ).pack(fill="x")
+
+        strikes_act = int(self.asignacion.get("total_strikes", 0))
+        tk.Label(
+            hdr,
+            text=f"Voluntario: {self.asignacion['nombre_completo']}  •  Strikes acumulados: {strikes_act}/5",
+            font=("Segoe UI", 8),
+            bg=PALETTE["negro"],
+            fg=PALETTE["plomo_claro"],
+            anchor="w"
+        ).pack(fill="x")
+
+        card = tk.Frame(
+            wrap,
+            bg=PALETTE["blanco"],
+            highlightbackground=PALETTE["plomo_borde"],
+            highlightthickness=1,
+            padx=16,
+            pady=14
+        )
+        card.pack(fill="x")
+
+        tk.Label(
+            card,
+            text="Penalización a aplicar (Al llegar a 5 strikes pasa a Inactivo_Definitivo):",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            anchor="w"
+        ).pack(fill="x", pady=(0, 4))
+
+        self.combo_penalidad = tb.Combobox(
+            card,
+            values=list(self.OPCIONES_PENALIDAD.keys()),
+            state="readonly",
+            width=52,
+            font=("Segoe UI", 9),
+            bootstyle="danger"
+        )
+        self.combo_penalidad.set("1 Strike — Cancelación o inasistencia sin aviso previo")
+        self.combo_penalidad.pack(fill="x", pady=(0, 10))
+
+        tk.Label(
+            card,
+            text="Motivo de la cancelación (obligatorio):",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            anchor="w"
+        ).pack(fill="x", pady=(0, 4))
+
+        self.entry_motivo = tb.Entry(card, font=("Segoe UI", 10))
+        self.entry_motivo.pack(fill="x", ipady=4, pady=(0, 6))
+        self.entry_motivo.focus_set()
+
+        btn_row = tk.Frame(wrap, bg=PALETTE["plomo_fondo"])
+        btn_row.pack(fill="x", pady=(10, 0))
+
+        tk.Button(
+            btn_row,
+            text="Cerrar",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["blanco"],
+            fg=PALETTE["negro"],
+            bd=1,
+            relief="solid",
+            padx=14,
+            pady=7,
+            cursor="hand2",
+            command=self.destroy
+        ).pack(side="left")
+
+        tk.Button(
+            btn_row,
+            text="⚠️ Confirmar Cancelación",
+            font=("Segoe UI", 10, "bold"),
+            bg=PALETTE["rojo"],
+            fg=PALETTE["blanco"],
+            activebackground=PALETTE["rojo_hover"],
+            activeforeground=PALETTE["blanco"],
+            bd=0,
+            padx=18,
+            pady=8,
+            cursor="hand2",
+            command=self._confirmar
+        ).pack(side="right")
+
+    def _confirmar(self):
+        strikes = self.OPCIONES_PENALIDAD.get(self.combo_penalidad.get(), 1)
+        motivo = self.entry_motivo.get()
+
+        exito, resultado = self.controller.cancelar_asignacion_voluntario(
+            asignacion=self.asignacion,
+            cantidad_strikes=strikes,
+            motivo=motivo,
+            id_admin_registra=self.sesion["id_usuario"]
+        )
+        if not exito:
+            messagebox.showwarning("Validación", str(resultado), parent=self)
+            return
+
+        if isinstance(resultado, dict):
+            msg = (
+                f"Asignación cancelada para {resultado['voluntario']}.\n"
+                f"• Strikes aplicados: +{resultado['strikes_aplicados']}\n"
+                f"• Acumulado actual: {resultado['total_strikes']}/5 strikes"
+            )
+            if resultado.get("inactivado_definitivo"):
+                msg += (
+                    "\n\n🚨 ALERTA: El voluntario alcanzó 5 strikes y fue marcado "
+                    "automáticamente como 'Inactivo_Definitivo' (cuenta bloqueada)."
+                )
+            messagebox.showinfo("Asignación Cancelada", msg, parent=self)
+
+        self.destroy()
+        if callable(self.on_confirmado):
+            self.on_confirmado()
+
+
 class AsignarVoluntariosView(tk.Frame):
     """Vista para Administrador: Asignación de voluntarios admitidos (máximo 1 actividad por día)."""
 
@@ -499,7 +666,7 @@ class AsignarVoluntariosView(tk.Frame):
 
         tk.Label(
             header,
-            text="Cada voluntario admitido puede participar como máximo en 1 actividad por día.",
+            text="Solo voluntarios con estado 'Admitido' pueden ser asignados (máximo 1 actividad por día).",
             font=("Segoe UI", 10),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["plomo_texto"]
@@ -600,7 +767,7 @@ class AsignarVoluntariosView(tk.Frame):
 
         self.tabla_admitidos = tb.Treeview(
             bi,
-            columns=("ci", "nombre", "telefono"),
+            columns=("ci", "nombre", "telefono", "strikes"),
             show="headings",
             height=8,
             style="Op.Treeview"
@@ -608,9 +775,11 @@ class AsignarVoluntariosView(tk.Frame):
         self.tabla_admitidos.heading("ci", text="CI")
         self.tabla_admitidos.heading("nombre", text="Voluntario")
         self.tabla_admitidos.heading("telefono", text="Teléfono")
-        self.tabla_admitidos.column("ci", width=95, anchor="center")
-        self.tabla_admitidos.column("nombre", width=200, anchor="w")
-        self.tabla_admitidos.column("telefono", width=95, anchor="center")
+        self.tabla_admitidos.heading("strikes", text="Strikes")
+        self.tabla_admitidos.column("ci", width=85, anchor="center")
+        self.tabla_admitidos.column("nombre", width=185, anchor="w")
+        self.tabla_admitidos.column("telefono", width=85, anchor="center")
+        self.tabla_admitidos.column("strikes", width=65, anchor="center")
         self.tabla_admitidos.tag_configure("par", background=PALETTE["blanco"])
         self.tabla_admitidos.tag_configure("impar", background="#F9FAFB")
         self.tabla_admitidos.pack(fill=BOTH, expand=True, pady=(0, 10))
@@ -668,37 +837,63 @@ class AsignarVoluntariosView(tk.Frame):
 
         self.tabla_asignados = tb.Treeview(
             bd,
-            columns=("ci", "nombre", "estado"),
+            columns=("ci", "nombre", "strikes", "estado"),
             show="headings",
             height=8,
             style="Op.Treeview"
         )
         self.tabla_asignados.heading("ci", text="CI")
         self.tabla_asignados.heading("nombre", text="Voluntario Asignado")
+        self.tabla_asignados.heading("strikes", text="Strikes")
         self.tabla_asignados.heading("estado", text="Estado")
-        self.tabla_asignados.column("ci", width=95, anchor="center")
-        self.tabla_asignados.column("nombre", width=210, anchor="w")
-        self.tabla_asignados.column("estado", width=95, anchor="center")
+        self.tabla_asignados.column("ci", width=85, anchor="center")
+        self.tabla_asignados.column("nombre", width=185, anchor="w")
+        self.tabla_asignados.column("strikes", width=65, anchor="center")
+        self.tabla_asignados.column("estado", width=90, anchor="center")
         self.tabla_asignados.tag_configure("par", background=PALETTE["blanco"])
         self.tabla_asignados.tag_configure("impar", background="#F9FAFB")
         self.tabla_asignados.pack(fill=BOTH, expand=True, pady=(0, 10))
 
+        acciones_der = tk.Frame(bd, bg=PALETTE["blanco"])
+        acciones_der.pack(fill="x")
+
         btn_quitar = tk.Button(
-            bd,
-            text="✕  Quitar Asignación Seleccionada",
-            font=("Segoe UI", 9, "bold"),
+            acciones_der,
+            text="✕ Quitar Sin Strike",
+            font=("Segoe UI", 8, "bold"),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["negro"],
+            activebackground=PALETTE["plomo_borde"],
+            bd=0,
+            padx=12,
+            pady=9,
+            cursor="hand2",
+            command=self._quitar_asignacion
+        )
+        btn_quitar.pack(side="left", padx=(0, 8))
+
+        btn_cancelar_asig = tk.Button(
+            acciones_der,
+            text="⚠️ Cancelar Participación (Aplicar Strike)",
+            font=("Segoe UI", 9, "bold"),
+            bg=PALETTE["rojo_suave"],
+            fg=PALETTE["rojo"],
             activebackground=PALETTE["rojo"],
             activeforeground=PALETTE["blanco"],
             bd=0,
             pady=9,
             cursor="hand2",
-            command=self._quitar_asignacion
+            command=self._abrir_cancelacion_strike
         )
-        btn_quitar.pack(fill="x")
-        btn_quitar.bind("<Enter>", lambda _e: btn_quitar.config(bg=PALETTE["rojo"], fg=PALETTE["blanco"]))
-        btn_quitar.bind("<Leave>", lambda _e: btn_quitar.config(bg=PALETTE["plomo_fondo"], fg=PALETTE["negro"]))
+        btn_cancelar_asig.pack(side="right", fill="x", expand=True)
+        btn_cancelar_asig.bind(
+            "<Enter>",
+            lambda _e: btn_cancelar_asig.config(bg=PALETTE["rojo"], fg=PALETTE["blanco"])
+        )
+        btn_cancelar_asig.bind(
+            "<Leave>",
+            lambda _e: btn_cancelar_asig.config(bg=PALETTE["rojo_suave"], fg=PALETTE["rojo"])
+        )
 
     def _cargar_combo_actividades(self):
         try:
@@ -760,7 +955,8 @@ class AsignarVoluntariosView(tk.Frame):
                 self.tabla_admitidos.insert("", tk.END, iid=iid, values=(
                     v["ci"],
                     v["nombre_completo"],
-                    v["telefono"] or "-"
+                    v["telefono"] or "-",
+                    f"{v['total_strikes']}/5"
                 ), tags=(tag,))
         except Exception as e:
             messagebox.showerror("Error", str(e))
@@ -782,6 +978,7 @@ class AsignarVoluntariosView(tk.Frame):
                 self.tabla_asignados.insert("", tk.END, iid=iid, values=(
                     a["ci"],
                     a["nombre_completo"],
+                    f"{a['total_strikes']}/5",
                     a["estado_asignacion"]
                 ), tags=(tag,))
         except Exception as e:
@@ -814,3 +1011,22 @@ class AsignarVoluntariosView(tk.Frame):
 
         messagebox.showinfo("Asignación Eliminada", mensaje)
         self._al_cambiar_actividad()
+
+    def _abrir_cancelacion_strike(self):
+        sel = self.tabla_asignados.selection()
+        asig = self.asignados_cache.get(sel[0]) if sel else None
+        if not asig:
+            messagebox.showwarning("Atención", "Selecciona un voluntario de la lista de asignados.")
+            return
+
+        def _post_cancelacion():
+            self._al_cambiar_actividad()
+            self._cargar_voluntarios_admitidos()
+
+        ModalCancelarAsignacionStrike(
+            master=self,
+            asignacion=asig,
+            sesion=self.sesion,
+            controller=self.controller,
+            on_confirmado=_post_cancelacion
+        )

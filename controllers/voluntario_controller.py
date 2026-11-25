@@ -10,6 +10,20 @@ class VoluntarioController:
     _RE_NUMEROS = re.compile(r"^\d+$")
     _RE_CORREO = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+    DISPONIBILIDADES = ("Mañanas", "Tardes", "Fines de Semana", "Tiempo Completo")
+    NIVELES_EDUCATIVOS = (
+        "Colegio Incompleto",
+        "Bachiller",
+        "Estudiante Universitario / Técnico",
+        "Título Profesional"
+    )
+    SITUACIONES_LABORALES = (
+        "No Trabaja",
+        "Trabaja Medio Tiempo",
+        "Trabaja Tiempo Completo",
+        "Independiente"
+    )
+
     def __init__(self):
         self.model = VoluntarioModel()
 
@@ -34,6 +48,29 @@ class VoluntarioController:
     def calcular_edad(self, fecha_nac: date) -> int:
         return self.model.calcular_edad(fecha_nac)
 
+    @staticmethod
+    def calcular_dictamen_automatico(
+        ci_presentado: bool,
+        datos_verificados: bool,
+        acepta_reglas: bool,
+        antecedentes_presentado: bool,
+        tiene_antecedentes: bool,
+        cv_presentado: bool
+    ) -> str:
+        """
+        Regla de negocio estricta (reemplaza trigger):
+        Solo es 'Admitido' si presentó todos los respaldos físicos y no tiene antecedentes.
+        """
+        cumple = (
+            bool(ci_presentado)
+            and bool(datos_verificados)
+            and bool(acepta_reglas)
+            and bool(antecedentes_presentado)
+            and (not bool(tiene_antecedentes))
+            and bool(cv_presentado)
+        )
+        return "Admitido" if cumple else "Rechazado"
+
     def registrar_postulante(self, datos: dict) -> tuple[bool, str]:
         ci = (datos.get("ci") or "").strip()
         nombres = " ".join((datos.get("nombres") or "").split())
@@ -43,8 +80,11 @@ class VoluntarioController:
         correo = (datos.get("correo") or "").strip()
         direccion = " ".join((datos.get("direccion") or "").split())
         fecha_nac_raw = datos.get("fecha_nacimiento")
+        id_admin = datos.get("id_admin_registra")
 
-        # 1. Validaciones obligatorias y estrictas (números vs. letras)
+        if not id_admin:
+            return False, "No se identificó la sesión del administrador que registra."
+
         if not ci:
             return False, "El Carnet de Identidad (CI) es obligatorio."
         if not self._RE_NUMEROS.match(ci) or not (5 <= len(ci) <= 12):
@@ -59,7 +99,6 @@ class VoluntarioController:
         if ap_materno and not self._RE_LETRAS.match(ap_materno):
             return False, "El Apellido Materno solo admite letras."
 
-        # 2. Validación de fecha de nacimiento y rango de edad (18 - 60 años)
         try:
             fecha_nac = (
                 fecha_nac_raw
@@ -76,8 +115,10 @@ class VoluntarioController:
         if edad < 18 or edad > 60:
             return False, f"Edad calculada: {edad} años. El voluntario debe tener entre 18 y 60 años."
 
-        # 3. Validaciones de contacto opcionales
-        if telefono and (not self._RE_NUMEROS.match(telefono) or not (7 <= len(telefono) <= 10)):
+        # Teléfono es NOT NULL en BD v1.3
+        if not telefono:
+            return False, "El número de teléfono / celular es obligatorio."
+        if not self._RE_NUMEROS.match(telefono) or not (7 <= len(telefono) <= 10):
             return False, "El teléfono debe contener únicamente números (7 a 10 dígitos)."
 
         if correo and not self._RE_CORREO.match(correo):
@@ -89,32 +130,112 @@ class VoluntarioController:
             "apellido_paterno": ap_paterno.title(),
             "apellido_materno": ap_materno.title() if ap_materno else None,
             "fecha_nacimiento": fecha_nac,
-            "telefono": telefono if telefono else None,
+            "telefono": telefono,
             "correo": correo.lower() if correo else None,
             "direccion": direccion if direccion else None,
-            "id_usuario_registra": datos.get("id_usuario_registra"),
+            "id_admin_registra": int(id_admin),
         }
 
         try:
             self.model.registrar_postulante(payload)
-            return True, f"Postulante {payload['nombres']} {payload['apellido_paterno']} ({edad} años) registrado correctamente."
+            return True, (
+                f"Postulante {payload['nombres']} {payload['apellido_paterno']} ({edad} años) "
+                "registrado correctamente."
+            )
         except Exception as e:
             return False, str(e)
 
     def listar_voluntarios(self, filtro_estado: str = "Todos", busqueda: str = "") -> list[dict]:
         return self.model.listar_voluntarios(filtro_estado=filtro_estado, busqueda=busqueda)
 
-    def admitir_voluntario(self, voluntario: dict) -> tuple[bool, str | dict]:
+    def evaluar_admision(self, voluntario: dict, form_eval: dict, id_admin_evalua: int) -> tuple[bool, str | dict]:
+        """
+        Procesa el checklist de 5 requisitos físicos (EVALUACION_ADMISION),
+        calcula el dictamen automático y valida motivo obligatorio si hay cambio manual.
+        """
         if not voluntario:
-            return False, "Selecciona un postulante de la tabla."
-        if voluntario.get("estado") != "Postulante":
-            return False, "Solo se puede admitir a registros con estado 'Postulante'."
+            return False, "Selecciona un registro de la tabla."
+        if voluntario.get("estado") in ("Admitido", "Inactivo", "Inactivo_Definitivo"):
+            return False, f"El voluntario ya tiene estado '{voluntario.get('estado')}' y no requiere evaluación inicial."
 
+        disponibilidad = form_eval.get("disponibilidad")
+        nivel_educativo = form_eval.get("nivel_educativo")
+        situacion_laboral = form_eval.get("situacion_laboral")
+
+        if disponibilidad not in self.DISPONIBILIDADES:
+            return False, "Selecciona una disponibilidad horaria válida."
+        if nivel_educativo not in self.NIVELES_EDUCATIVOS:
+            return False, "Selecciona un nivel educativo válido."
+        if situacion_laboral not in self.SITUACIONES_LABORALES:
+            return False, "Selecciona una situación laboral válida."
+
+        ci_pres = bool(form_eval.get("ci_presentado"))
+        datos_ver = bool(form_eval.get("datos_verificados"))
+        acepta_reg = bool(form_eval.get("acepta_reglas"))
+        ant_pres = bool(form_eval.get("antecedentes_presentado"))
+        tiene_ant = bool(form_eval.get("tiene_antecedentes")) if ant_pres else False
+        cv_pres = bool(form_eval.get("cv_presentado"))
+
+        resultado_auto = self.calcular_dictamen_automatico(
+            ci_presentado=ci_pres,
+            datos_verificados=datos_ver,
+            acepta_reglas=acepta_reg,
+            antecedentes_presentado=ant_pres,
+            tiene_antecedentes=tiene_ant,
+            cv_presentado=cv_pres
+        )
+
+        decision_final = form_eval.get("decision_final") or resultado_auto
+        if decision_final not in ("Admitido", "Rechazado"):
+            return False, "La decisión final debe ser 'Admitido' o 'Rechazado'."
+
+        motivo_cambio = " ".join((form_eval.get("motivo_cambio") or "").split())
+        if decision_final != resultado_auto and not motivo_cambio:
+            return False, (
+                f"El dictamen automático del sistema es '{resultado_auto}'. "
+                "Debes ingresar el motivo por el cual estás modificando la decisión."
+            )
+
+        eval_payload = {
+            "ci_presentado": int(ci_pres),
+            "datos_verificados": int(datos_ver),
+            "disponibilidad": disponibilidad,
+            "acepta_reglas": int(acepta_reg),
+            "antecedentes_presentado": int(ant_pres),
+            "tiene_antecedentes": int(tiene_ant),
+            "cv_presentado": int(cv_pres),
+            "nivel_educativo": nivel_educativo,
+            "situacion_laboral": situacion_laboral,
+            "resultado_automatico": resultado_auto,
+            "decision_final": decision_final,
+            "motivo_cambio": motivo_cambio if decision_final != resultado_auto else None,
+            "id_admin_evalua": int(id_admin_evalua)
+        }
+
+        if decision_final == "Rechazado":
+            try:
+                self.model.guardar_evaluacion_y_procesar(
+                    id_voluntario=voluntario["id_voluntario"],
+                    evaluacion=eval_payload
+                )
+                return True, {
+                    "decision_final": "Rechazado",
+                    "nombre": voluntario["nombre_completo"],
+                    "cuenta_creada": False
+                }
+            except Exception as e:
+                return False, str(e)
+
+        # Si decision_final == "Admitido", generar credenciales únicas
         primer_nombre = self._normalizar_texto_usuario(voluntario["nombres"].split()[0])
         primer_apellido = self._normalizar_texto_usuario(voluntario["apellido_paterno"].split()[0])
         ci_limpio = re.sub(r"\D", "", str(voluntario["ci"]))
 
-        base_user = f"{primer_nombre}.{primer_apellido}" if primer_nombre and primer_apellido else f"vol.{ci_limpio}"
+        base_user = (
+            f"{primer_nombre}.{primer_apellido}"
+            if primer_nombre and primer_apellido
+            else f"vol.{ci_limpio}"
+        )
         password_plana = f"Scb{ci_limpio}"
         password_hash = AuthModel.hashear_password(password_plana)
 
@@ -127,14 +248,17 @@ class VoluntarioController:
         ultimo_error = "No se pudo generar un usuario único."
         for usuario_candidato in candidatos:
             try:
-                self.model.admitir_voluntario_transaccion(
+                res = self.model.guardar_evaluacion_y_procesar(
                     id_voluntario=voluntario["id_voluntario"],
+                    evaluacion=eval_payload,
                     username=usuario_candidato,
                     password_hash=password_hash
                 )
                 return True, {
+                    "decision_final": "Admitido",
                     "nombre": voluntario["nombre_completo"],
-                    "usuario": usuario_candidato,
+                    "cuenta_creada": res["cuenta_creada"],
+                    "usuario": res["usuario"] or voluntario.get("cuenta_usuario"),
                     "password": password_plana
                 }
             except ValueError as e:

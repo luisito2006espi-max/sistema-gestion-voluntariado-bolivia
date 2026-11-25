@@ -2,7 +2,7 @@ from models.auth_model import AuthModel
 
 
 class AuthController:
-    sesion_activa = None
+    sesion_activa: dict | None = None
 
     def __init__(self):
         self.model = AuthModel()
@@ -16,7 +16,6 @@ class AuthController:
             if not datos_sesion:
                 return False, "Usuario o contraseña incorrectos.", None
 
-            # Flujo 1: Registrar auditoría inmediatamente tras login exitoso
             self.model.registrar_auditoria_acceso(datos_sesion["id_usuario"])
             AuthController.sesion_activa = datos_sesion
             return True, f"Bienvenido, {datos_sesion['nombre_mostrar']}.", datos_sesion
@@ -25,6 +24,16 @@ class AuthController:
 
     def obtener_historial_accesos(self, limite: int = 200) -> list[dict]:
         return self.model.listar_auditoria_accesos(limite)
+
+    @staticmethod
+    def obtener_sesion() -> dict | None:
+        return AuthController.sesion_activa
+
+    @staticmethod
+    def obtener_id_usuario_activo() -> int:
+        if not AuthController.sesion_activa:
+            raise RuntimeError("No hay una sesión de usuario activa.")
+        return int(AuthController.sesion_activa["id_usuario"])
 
     @staticmethod
     def cerrar_sesion():

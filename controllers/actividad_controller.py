@@ -1,5 +1,5 @@
 import re
-from datetime import date, time
+from datetime import date, datetime, time
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from models.actividad_model import ActividadModel
@@ -53,7 +53,6 @@ class ActividadController:
 
     @classmethod
     def generar_horas_llegada(cls, hora_inicio_str: str, hora_fin_str: str) -> list[str]:
-        """Genera horas posibles de llegada en bloques de 15 min dentro de la actividad."""
         try:
             ini = cls._a_minutos(hora_inicio_str)
             fin = cls._a_minutos(hora_fin_str)
@@ -65,7 +64,6 @@ class ActividadController:
 
     @classmethod
     def generar_horas_partida(cls, hora_llegada_str: str, hora_fin_str: str) -> list[str]:
-        """Genera horas posibles de partida desde (llegada + 15 min) hasta hora_fin."""
         try:
             llegada = cls._a_minutos(hora_llegada_str)
             fin = cls._a_minutos(hora_fin_str)
@@ -77,7 +75,6 @@ class ActividadController:
 
     @classmethod
     def calcular_horas_rango(cls, hora_llegada_str: str, hora_partida_str: str) -> float:
-        """Calcula las horas decimales exactas entre llegada y partida."""
         try:
             ini = cls._a_minutos(hora_llegada_str)
             fin = cls._a_minutos(hora_partida_str)
@@ -89,7 +86,6 @@ class ActividadController:
 
     @classmethod
     def extraer_horario_observaciones(cls, obs: str | None) -> tuple[str | None, str | None, str]:
-        """Separa el prefijo '[HH:MM - HH:MM]' del texto libre de observaciones."""
         texto = (obs or "").strip()
         if not texto:
             return None, None, ""
@@ -145,7 +141,8 @@ class ActividadController:
             "hora_inicio": h_ini_obj,
             "hora_fin": h_fin_obj,
             "lugar": lugar,
-            "cupo_maximo": cupo
+            "cupo_maximo": cupo,
+            "id_admin_crea": datos.get("id_admin_crea")
         }
         return True, "", payload
 
@@ -206,12 +203,13 @@ class ActividadController:
 
         try:
             self.model.cambiar_estado_actividad(actividad["id_actividad"], "Programada")
+            self.model.sincronizar_estados_por_horario()
             return True, f"La actividad '{actividad['nombre']}' ha sido restablecida."
         except Exception as e:
             return False, str(e)
 
     # =========================================================================
-    # ASIGNACIÓN DE VOLUNTARIOS
+    # ASIGNACIÓN DE VOLUNTARIOS Y CANCELACIÓN CON STRIKES
     # =========================================================================
 
     def obtener_voluntarios_admitidos(self, busqueda: str = "") -> list[dict]:
@@ -242,12 +240,41 @@ class ActividadController:
 
         try:
             self.model.quitar_asignacion(asignacion["id_asignacion"])
-            return True, f"Se quitó la asignación de {asignacion['nombre_completo']}."
+            return True, f"Se quitó la asignación de {asignacion['nombre_completo']} sin penalización."
+        except Exception as e:
+            return False, str(e)
+
+    def cancelar_asignacion_voluntario(
+        self,
+        asignacion: dict,
+        cantidad_strikes: int,
+        motivo: str,
+        id_admin_registra: int
+    ) -> tuple[bool, str | dict]:
+        """Cancela la participación de un voluntario y aplica strikes (5 strikes = Inactivo_Definitivo)."""
+        if not asignacion:
+            return False, "Selecciona un voluntario de la lista de asignados."
+
+        motivo_limpio = " ".join((motivo or "").split())
+        if not motivo_limpio:
+            return False, "Ingresa el motivo de la cancelación."
+
+        if cantidad_strikes not in (0, 1, 2):
+            return False, "La penalización debe ser de 0, 1 o 2 strikes."
+
+        try:
+            res = self.model.cancelar_asignacion_con_strike(
+                id_asignacion=asignacion["id_asignacion"],
+                cantidad_strikes=cantidad_strikes,
+                motivo=motivo_limpio,
+                id_admin_registra=id_admin_registra
+            )
+            return True, res
         except Exception as e:
             return False, str(e)
 
     # =========================================================================
-    # CONTROL DE ASISTENCIA (SOLO ACTIVIDADES FINALIZADAS + LLEGADA/PARTIDA)
+    # CONTROL DE ASISTENCIA (FNBC: hora_entrada / hora_salida)
     # =========================================================================
 
     def guardar_asistencia(
@@ -257,7 +284,8 @@ class ActividadController:
         asistio: bool,
         hora_llegada: str,
         hora_partida: str,
-        observaciones: str
+        observaciones: str,
+        id_admin_registra: int | None = None
     ) -> tuple[bool, str]:
         if not actividad:
             return False, "Selecciona una actividad."
@@ -274,6 +302,8 @@ class ActividadController:
 
         if not asistio:
             horas = 0.0
+            hora_ent_sql = None
+            hora_sal_sql = None
             obs_final = obs_limpia or None
         else:
             llegadas_validas = self.generar_horas_llegada(
@@ -295,15 +325,19 @@ class ActividadController:
             if horas <= 0 or horas > duracion_max:
                 return False, f"Las horas calculadas ({horas} hrs) exceden la duración de la actividad ({duracion_max} hrs)."
 
-            prefijo = f"[{hora_llegada} - {hora_partida}]"
-            obs_final = f"{prefijo} {obs_limpia}".strip()
+            hora_ent_sql = f"{hora_llegada}:00"
+            hora_sal_sql = f"{hora_partida}:00"
+            obs_final = obs_limpia or None
 
         try:
             self.model.registrar_o_actualizar_asistencia(
                 id_asignacion=asignacion["id_asignacion"],
                 asistio=asistio,
+                hora_entrada_sql=hora_ent_sql,
+                hora_salida_sql=hora_sal_sql,
                 horas_cumplidas=horas,
-                observaciones=obs_final
+                observaciones=obs_final,
+                id_admin_registra=id_admin_registra
             )
             estado_txt = (
                 f"Asistió ({hora_llegada} a {hora_partida} = {horas:.2f} hrs)"
@@ -315,25 +349,33 @@ class ActividadController:
             return False, str(e)
 
     # =========================================================================
-    # PORTAL DEL VOLUNTARIO
+    # PORTAL DEL VOLUNTARIO (INCLUYE STRIKES Y AUTOCANCELACIÓN)
     # =========================================================================
 
     def obtener_datos_portal_voluntario(self, id_usuario: int, filtro_estado: str = "Todas") -> dict:
-        """
-        Verifica el perfil activo del voluntario y retorna sus actividades e indicadores personales.
-        """
         perfil = self.model.obtener_perfil_voluntario_por_usuario(id_usuario)
         if not perfil:
             raise ValueError("No se encontró un perfil de voluntario asociado a esta cuenta.")
 
+        if perfil["estado"] == "Inactivo_Definitivo":
+            raise ValueError(
+                "Tu cuenta fue inactivada definitivamente al acumular 5 strikes de incumplimiento."
+            )
         if perfil["estado"] == "Inactivo":
             raise ValueError("Tu cuenta de voluntario ha sido desactivada por el Administrador.")
 
         actividades = self.model.listar_actividades_voluntario(perfil["id_voluntario"], filtro_estado)
         todas = self.model.listar_actividades_voluntario(perfil["id_voluntario"], "Todas")
+        historial_strikes = self.model.listar_strikes_voluntario(perfil["id_voluntario"])
 
-        programadas = sum(1 for a in todas if a["estado_actividad"] == "Programada" and a["estado_asignacion"] != "Cancelada")
-        en_curso = sum(1 for a in todas if a["estado_actividad"] == "En Curso" and a["estado_asignacion"] != "Cancelada")
+        programadas = sum(
+            1 for a in todas
+            if a["estado_actividad"] == "Programada" and a["estado_asignacion"] in ("Pendiente", "Confirmada")
+        )
+        en_curso = sum(
+            1 for a in todas
+            if a["estado_actividad"] == "En Curso" and a["estado_asignacion"] in ("Pendiente", "Confirmada")
+        )
         asistencias = sum(1 for a in todas if a["id_asistencia"] is not None and bool(a["asistio"]))
         inasistencias = sum(1 for a in todas if a["id_asistencia"] is not None and not bool(a["asistio"]))
         total_horas = round(sum(a["horas_cumplidas"] for a in todas), 2)
@@ -345,18 +387,64 @@ class ActividadController:
             "perfil": perfil,
             "actividades": actividades,
             "todas": todas,
+            "strikes": historial_strikes,
             "resumen": {
                 "programadas": programadas,
                 "en_curso": en_curso,
                 "asistencias": asistencias,
                 "inasistencias": inasistencias,
                 "total_horas": total_horas,
-                "cumplimiento": cumplimiento
+                "cumplimiento": cumplimiento,
+                "strikes_actuales": perfil["total_strikes"]
             }
         }
 
+    def cancelar_participacion_desde_portal(
+        self,
+        id_usuario: int,
+        actividad_item: dict,
+        motivo: str
+    ) -> tuple[bool, str | dict]:
+        """
+        Permite al voluntario cancelar una actividad programada desde su portal:
+        - Aplica 1 strike si falta >= 24 horas para el inicio, o 2 strikes si es dentro de las 24h previas.
+        - Si alcanza 5 strikes, pasa automáticamente a 'Inactivo_Definitivo'.
+        """
+        if not actividad_item:
+            return False, "Selecciona una actividad programada de la tabla."
+
+        if actividad_item.get("estado_asignacion") == "Cancelada":
+            return False, "Esta asignación ya se encuentra cancelada."
+
+        if actividad_item.get("estado_actividad") != "Programada":
+            return False, "Solo puedes cancelar tu participación en actividades que aún estén 'Programada'."
+
+        motivo_limpio = " ".join((motivo or "").split())
+        if len(motivo_limpio) < 5:
+            return False, "Debes escribir una justificación breve (mínimo 5 caracteres)."
+
+        dt_inicio = datetime.combine(actividad_item["fecha"], datetime.min.time())
+        try:
+            h, m = map(int, actividad_item["hora_inicio_str"].split(":"))
+            dt_inicio = dt_inicio.replace(hour=h, minute=m)
+        except Exception:
+            pass
+
+        horas_restantes = (dt_inicio - datetime.now()).total_seconds() / 3600.0
+        strikes_correspondientes = 2 if horas_restantes < 24 else 1
+
+        try:
+            res = self.model.cancelar_asignacion_con_strike(
+                id_asignacion=actividad_item["id_asignacion"],
+                cantidad_strikes=strikes_correspondientes,
+                motivo=f"[Cancelación Voluntario] {motivo_limpio}",
+                id_admin_registra=id_usuario
+            )
+            return True, res
+        except Exception as e:
+            return False, str(e)
+
     def exportar_historial_voluntario_excel(self, ruta_archivo: str, paquete: dict) -> tuple[bool, str]:
-        """Exporta el historial personal de horas y actividades del voluntario a Excel."""
         try:
             wb = openpyxl.Workbook()
             ws = wb.active
@@ -374,7 +462,9 @@ class ActividadController:
             ws["A2"].font = Font(bold=True, size=10)
             ws["A3"] = (
                 f"Total Horas Cumplidas: {resumen['total_horas']} hrs  |  "
-                f"Asistencias: {resumen['asistencias']}  |  Cumplimiento: {resumen['cumplimiento']}%"
+                f"Asistencias: {resumen['asistencias']}  |  "
+                f"Cumplimiento: {resumen['cumplimiento']}%  |  "
+                f"Strikes: {resumen.get('strikes_actuales', 0)}/5"
             )
             ws["A3"].font = Font(italic=True, color="4B5563", size=10)
 
@@ -387,7 +477,9 @@ class ActividadController:
                 c.alignment = Alignment(horizontal="center", vertical="center")
 
             for r_idx, item in enumerate(paquete["todas"], start=fila_hdr + 1):
-                if item["id_asistencia"] is None:
+                if item.get("estado_asignacion") == "Cancelada":
+                    estado_asis = "Asignación Cancelada"
+                elif item["id_asistencia"] is None:
                     estado_asis = "Pendiente de registro"
                 elif bool(item["asistio"]):
                     estado_asis = "Asistió"

@@ -2,26 +2,18 @@ import getpass
 import mysql.connector
 from mysql.connector import Error
 from config.database import Database
-from models.auth_model import AuthModel
+from utils.security import encriptar_password
 
 
 class SeedAdminManager:
     def __init__(self):
         self.db = Database()
 
-    def _detectar_columna_password(self, cursor) -> str:
-        cursor.execute("SHOW COLUMNS FROM USUARIO")
-        cols = {
-            (f["Field"] if isinstance(f, dict) else f[0])
-            for f in cursor.fetchall()
-        }
-        for candidata in ("password_hash", "contrasena", "password"):
-            if candidata in cols:
-                return candidata
-        raise RuntimeError("No se encontró columna de contraseña en la tabla USUARIO.")
-
     def asegurar_catalogos_base(self):
-        """Garantiza los catálogos obligatorios (esquema v2.0) sin Tarjeta ni Recepcionista."""
+        """
+        Garantiza el catálogo base de INSUMO (esquema v1.3 FNBC).
+        Los estados, roles, tipos de donación y métodos de pago ahora son ENUM nativos.
+        """
         conn = None
         cursor = None
         try:
@@ -29,68 +21,22 @@ class SeedAdminManager:
             cursor = conn.cursor()
 
             cursor.execute("""
-                INSERT INTO ROL (id_rol, nombre) VALUES
-                (1, 'Administrador'),
-                (3, 'Voluntario')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
-            """)
-
-            cursor.execute("""
-                INSERT INTO ESTADO_VOLUNTARIO (id_estado_vol, nombre) VALUES
-                (1, 'Postulante'),
-                (2, 'Admitido'),
-                (3, 'Rechazado'),
-                (4, 'Inactivo')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
-            """)
-
-            cursor.execute("""
-                INSERT INTO ESTADO_ACTIVIDAD (id_estado_actividad, nombre) VALUES
-                (1, 'Programada'),
-                (2, 'En Curso'),
-                (3, 'Finalizada'),
-                (4, 'Cancelada')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
-            """)
-
-            cursor.execute("""
-                INSERT INTO ESTADO_ASIGNACION (id_estado_asignacion, nombre) VALUES
-                (1, 'Confirmada'),
-                (2, 'Cancelada')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
-            """)
-
-            cursor.execute("""
-                INSERT INTO TIPO_DONACION (id_tipo_donacion, nombre) VALUES
-                (1, 'DINERO'),
-                (2, 'MATERIAL')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
-            """)
-
-            cursor.execute("DELETE FROM METODO_PAGO WHERE LOWER(nombre) = 'tarjeta'")
-            cursor.execute("""
-                INSERT INTO METODO_PAGO (id_metodo_pago, nombre) VALUES
-                (1, 'QR'),
-                (3, 'Efectivo'),
-                (4, 'Transferencia')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre)
-            """)
-
-            cursor.execute("""
-                INSERT INTO INSUMO (id_insumo, nombre, unidad_medida) VALUES
-                (1, 'Ropa', 'Prendas'),
-                (2, 'Alimentos', 'Kilogramos (kg)'),
-                (3, 'Útiles escolares', 'Unidades / Kits'),
-                (4, 'Higiene', 'Unidades / Paquetes'),
-                (5, 'Medicamentos / Botiquín', 'Cajas / Unidades')
-                ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), unidad_medida = VALUES(unidad_medida)
+                INSERT INTO INSUMO (id_insumo, nombre, unidad_medida, stock_actual) VALUES
+                (1, 'Ropa de Abrigo Infantil', 'Prendas', 0.00),
+                (2, 'Alimentos No Perecederos', 'Kilogramos (kg)', 0.00),
+                (3, 'Útiles Escolares', 'Unidades / Kits', 0.00),
+                (4, 'Artículos de Higiene y Bioseguridad', 'Unidades / Paquetes', 0.00),
+                (5, 'Medicamentos / Botiquín Básico', 'Cajas / Unidades', 0.00)
+                ON DUPLICATE KEY UPDATE
+                    nombre = VALUES(nombre),
+                    unidad_medida = VALUES(unidad_medida)
             """)
 
             conn.commit()
         except Exception as e:
             if conn:
                 conn.rollback()
-            raise RuntimeError(f"Error al verificar catálogos base: {e}")
+            raise RuntimeError(f"Error al verificar catálogo base de insumos: {e}")
         finally:
             if cursor:
                 cursor.close()
@@ -98,7 +44,7 @@ class SeedAdminManager:
                 conn.close()
 
     def crear_administrador(self, usuario: str, password: str) -> tuple[bool, str]:
-        """Crea un nuevo Administrador usando AuthModel.hashear_password (utils/security.py)."""
+        """Crea un nuevo Administrador en USUARIO usando rol ENUM('Administrador')."""
         user_limpio = usuario.strip().lower()
         if len(user_limpio) < 4:
             return False, "El nombre de usuario debe tener al menos 4 caracteres."
@@ -111,19 +57,16 @@ class SeedAdminManager:
         cursor = None
         try:
             conn = self.db.get_connection()
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor()
 
-            cursor.execute("SELECT id_rol FROM ROL WHERE nombre = 'Administrador' LIMIT 1")
-            rol_fila = cursor.fetchone()
-            if not rol_fila:
-                return False, "El rol 'Administrador' no existe en la tabla ROL."
-
-            col_pass = self._detectar_columna_password(cursor)
-            password_hash = AuthModel.hashear_password(password.strip())
+            password_hash = encriptar_password(password.strip())
 
             cursor.execute(
-                f"INSERT INTO USUARIO (usuario, {col_pass}, id_rol) VALUES (%s, %s, %s)",
-                (user_limpio, password_hash, rol_fila["id_rol"])
+                """
+                INSERT INTO USUARIO (usuario, password_hash, rol, activo)
+                VALUES (%s, %s, 'Administrador', 1)
+                """,
+                (user_limpio, password_hash)
             )
             conn.commit()
             return True, f"Administrador '{user_limpio}' creado correctamente."
@@ -151,18 +94,21 @@ class SeedAdminManager:
             conn = self.db.get_connection()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("""
-                SELECT u.usuario, r.nombre AS rol
-                FROM USUARIO u
-                INNER JOIN ROL r ON u.id_rol = r.id_rol
-                WHERE r.nombre = 'Administrador'
-                ORDER BY u.usuario ASC
+                SELECT usuario, rol, activo, fecha_creacion
+                FROM USUARIO
+                WHERE rol = 'Administrador'
+                ORDER BY usuario ASC
             """)
             filas = cursor.fetchall()
             print("\n--- Administradores Registrados ---")
             if not filas:
                 print("  (Ningún administrador registrado aún)")
             for f in filas:
-                print(f"  • Usuario: {f['usuario']:<20} | Rol: {f['rol']}")
+                estado_txt = "Activo" if f["activo"] == 1 else "Inactivo"
+                print(
+                    f"  • Usuario: {f['usuario']:<20} | Rol: {f['rol']:<13} "
+                    f"| Estado: {estado_txt:<8} | Creado: {f['fecha_creacion']}"
+                )
             print("-------------------------------------\n")
         except Error as e:
             print(f"\n[Error] No se pudo listar administradores: {e}\n")

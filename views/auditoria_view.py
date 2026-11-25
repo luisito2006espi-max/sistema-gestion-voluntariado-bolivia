@@ -52,7 +52,7 @@ class AuditoriaAccesosView(tk.Frame):
 
     def _construir_ui(self):
         # =====================================================================
-        # 1. ENCABEZADO (20 pt)
+        # 1. ENCABEZADO
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         header.pack(fill="x", pady=(0, 8))
@@ -70,7 +70,7 @@ class AuditoriaAccesosView(tk.Frame):
 
         tk.Label(
             titulos,
-            text="Registro histórico de inicios de sesión capturado automáticamente por MySQL.",
+            text="Registro histórico de inicios de sesión controlado por el módulo de seguridad.",
             font=("Segoe UI", 10),
             bg=PALETTE["plomo_fondo"],
             fg=PALETTE["plomo_texto"]
@@ -110,7 +110,6 @@ class AuditoriaAccesosView(tk.Frame):
 
         fb = filtro_card.body
 
-        # Buscador general (Nombre, Cuenta, Fecha u Hora)
         tk.Label(
             fb,
             text="🔍 Buscar (Nombre, Usuario, Fecha u Hora):",
@@ -123,7 +122,6 @@ class AuditoriaAccesosView(tk.Frame):
         self.entry_buscar.pack(side="left", ipady=3, padx=(0, 14))
         self.entry_buscar.bind("<KeyRelease>", lambda _e: self._aplicar_filtros())
 
-        # Filtro por Rol
         tk.Label(
             fb,
             text="Rol:",
@@ -143,7 +141,6 @@ class AuditoriaAccesosView(tk.Frame):
         self.combo_rol.pack(side="left", padx=(0, 14))
         self.combo_rol.bind("<<ComboboxSelected>>", lambda _e: self._aplicar_filtros())
 
-        # Filtro rápido por Fecha (AAAA-MM-DD)
         tk.Label(
             fb,
             text="Fecha (AAAA-MM-DD):",

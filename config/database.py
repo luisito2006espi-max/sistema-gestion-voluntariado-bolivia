@@ -3,13 +3,15 @@ from mysql.connector import Error
 
 
 class Database:
-    # Configuración directa de MySQL en XAMPP
+    # Configuración directa de MySQL en XAMPP (BD v1.3 FNBC)
     DB_CONFIG = {
         "host": "localhost",
         "port": 3306,
         "user": "root",
-        "password": "",              # En XAMPP por defecto va vacío
-        "database": "save_the_children_bolivia_db",  # <-- Reemplaza por el nombre exacto de tu BD
+        "password": "",  # En XAMPP por defecto va vacío
+        "database": "save_the_children_db",
+        "charset": "utf8mb4",
+        "use_unicode": True,
         "autocommit": False
     }
 

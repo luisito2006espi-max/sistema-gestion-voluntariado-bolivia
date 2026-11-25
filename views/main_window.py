@@ -23,6 +23,7 @@ class MainWindow(tb.Frame):
         self.on_logout = on_logout
         self.botones_menu = {}
         self.opcion_actual = ""
+        self.lbl_strikes = None
 
         try:
             self.master.state("zoomed")
@@ -93,6 +94,20 @@ class MainWindow(tb.Frame):
             pady=2
         ).pack(side="left")
 
+        if self.sesion.get("rol") == "Voluntario":
+            strikes = int(self.sesion.get("strikes_actuales", 0))
+            bg_strike = PALETTE["rojo_oscuro"] if strikes >= 3 else PALETTE["plomo_texto"]
+            self.lbl_strikes = tk.Label(
+                user_pill,
+                text=f"⚡ {strikes}/5 STRIKES",
+                font=("Segoe UI", 7, "bold"),
+                bg=bg_strike,
+                fg=PALETTE["blanco"],
+                padx=8,
+                pady=2
+            )
+            self.lbl_strikes.pack(side="left", padx=(6, 0))
+
         btn_salir = tk.Button(
             right_box,
             text="Cerrar Sesión",
@@ -112,7 +127,7 @@ class MainWindow(tb.Frame):
         btn_salir.bind("<Leave>", lambda _e: btn_salir.config(bg=PALETTE["negro_suave"]))
 
         # =====================================================================
-        # 2. BARRA HORIZONTAL DE PESTAÑAS (MISMO NOMBRE EN CADA MÓDULO)
+        # 2. BARRA HORIZONTAL DE PESTAÑAS
         # =====================================================================
         nav_bar = tk.Frame(self, bg=PALETTE["blanco"], padx=16, pady=4)
         nav_bar.pack(fill="x")
@@ -148,6 +163,12 @@ class MainWindow(tb.Frame):
         self.area_contenido.pack(fill=BOTH, expand=True)
 
         self._navegar(opciones_menu[0])
+
+    def _refrescar_badge_strikes(self):
+        if self.lbl_strikes is not None:
+            strikes = int(self.sesion.get("strikes_actuales", 0))
+            bg_strike = PALETTE["rojo_oscuro"] if strikes >= 3 else PALETTE["plomo_texto"]
+            self.lbl_strikes.config(text=f"⚡ {strikes}/5 STRIKES", bg=bg_strike)
 
     def _obtener_opciones_por_rol(self, rol: str) -> list[str]:
         if rol == "Administrador":
@@ -192,6 +213,7 @@ class MainWindow(tb.Frame):
 
     def _navegar(self, opcion: str):
         self._resaltar_boton_activo(opcion)
+        self._refrescar_badge_strikes()
 
         for w in self.area_contenido.winfo_children():
             w.destroy()

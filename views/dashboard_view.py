@@ -1,5 +1,6 @@
 from datetime import date
 import tkinter as tk
+from tkinter import messagebox
 import ttkbootstrap as tb
 from ttkbootstrap.constants import *
 from controllers.voluntario_controller import VoluntarioController
@@ -67,7 +68,7 @@ class DashboardView(tk.Frame):
 
     def _construir_ui(self):
         # =====================================================================
-        # 1. ENCABEZADO EJECUTIVO (Título principal en 22 pt)
+        # 1. ENCABEZADO EJECUTIVO
         # =====================================================================
         header = tk.Frame(self, bg=PALETTE["plomo_fondo"])
         header.pack(fill="x", pady=(0, 8))
@@ -331,7 +332,6 @@ class DashboardView(tk.Frame):
 
         b = card.body
 
-        # Barra superior de acento
         tk.Frame(b, bg=color_acento, height=4).pack(fill="x", pady=(0, 11))
 
         tk.Label(
@@ -387,10 +387,10 @@ class DashboardView(tk.Frame):
     def _cargar_datos(self):
         try:
             self.act_controller.model.sincronizar_estados_por_horario()
-        except Exception:
-            pass
-
-        datos = self.vol_controller.obtener_resumen_dashboard()
+            datos = self.vol_controller.obtener_resumen_dashboard()
+        except Exception as e:
+            messagebox.showerror("Error al Cargar Panel", str(e))
+            return
 
         self.kpi_post_val.config(text=str(datos["postulantes"]))
         self.kpi_post_sub.config(
@@ -398,7 +398,11 @@ class DashboardView(tk.Frame):
         )
 
         self.kpi_vol_val.config(text=str(datos["admitidos"]))
-        self.kpi_vol_sub.config(text=f"⏱ {datos['horas_totales']:,.1f} hrs de servicio acumuladas")
+        inactivos_def = int(datos.get("inactivos_definitivos", 0))
+        sub_vol = f"⏱ {datos['horas_totales']:,.1f} hrs acumuladas"
+        if inactivos_def > 0:
+            sub_vol += f" • 🚫 {inactivos_def} baja(s) strikes"
+        self.kpi_vol_sub.config(text=sub_vol)
 
         self.kpi_act_val.config(text=str(datos["actividades_total"]))
         self.kpi_act_sub.config(

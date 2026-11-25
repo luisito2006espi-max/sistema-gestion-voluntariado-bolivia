@@ -50,6 +50,7 @@ class ReporteController:
         total_horas = round(sum(r["total_horas"] for r in rendimiento), 2)
         total_asistencias = sum(r["asistencias"] for r in rendimiento)
         total_inasistencias = sum(r["inasistencias"] for r in rendimiento)
+        total_strikes = sum(r["total_strikes"] for r in rendimiento)
         total_recaudado = round(sum(d["total_monto"] for d in don_metodo), 2)
         total_voluntarios = sum(v["cantidad"] for v in vol_estado)
         total_actividades = sum(a["cantidad"] for a in act_estado)
@@ -60,6 +61,7 @@ class ReporteController:
                 "total_horas": total_horas,
                 "total_asistencias": total_asistencias,
                 "total_inasistencias": total_inasistencias,
+                "total_strikes": total_strikes,
                 "total_recaudado": total_recaudado,
                 "total_voluntarios": total_voluntarios,
                 "total_actividades": total_actividades
@@ -79,14 +81,13 @@ class ReporteController:
         }
 
     def exportar_a_excel(self, ruta_archivo: str, datos: dict) -> tuple[bool, str]:
-        """Exporta el reporte completo a un archivo Excel (.xlsx) sencillo con 5 hojas."""
+        """Exporta el reporte completo a un archivo Excel (.xlsx) con 5 hojas."""
         try:
             wb = openpyxl.Workbook()
 
-            # Estilos rojos institucionales
-            fill_header = PatternFill(start_color="7F1D1D", end_color="7F1D1D", fill_type="solid")
+            fill_header = PatternFill(start_color="DA291C", end_color="DA291C", fill_type="solid")
             font_header = Font(color="FFFFFF", bold=True, size=11)
-            font_titulo = Font(color="7F1D1D", bold=True, size=14)
+            font_titulo = Font(color="DA291C", bold=True, size=14)
 
             def estilizar_hoja(ws, titulo: str, encabezados: list[str], filas: list[list]):
                 ws["A1"] = titulo
@@ -105,7 +106,6 @@ class ReporteController:
                     for c_idx, val in enumerate(fila, start=1):
                         ws.cell(row=r_idx, column=c_idx, value=val)
 
-                # Ajustar ancho de columnas automáticamente
                 for col in ws.columns:
                     max_len = 0
                     col_letter = col[0].column_letter
@@ -124,6 +124,7 @@ class ReporteController:
                 ["Horas de Voluntariado Cumplidas", kpis["total_horas"]],
                 ["Asistencias Confirmadas", kpis["total_asistencias"]],
                 ["Inasistencias Registradas", kpis["total_inasistencias"]],
+                ["Strikes Acumulados en Voluntarios", kpis["total_strikes"]],
                 ["Recaudación Monetaria Total (Bs.)", kpis["total_recaudado"]],
             ]
             estilizar_hoja(ws1, "Save the Children Bolivia — Resumen Ejecutivo", ["Indicador", "Valor"], filas_kpi)
@@ -138,6 +139,7 @@ class ReporteController:
                     r["actividades_asignadas"],
                     r["asistencias"],
                     r["inasistencias"],
+                    f"{r['total_strikes']}/5",
                     r["total_horas"],
                     f"{r['porcentaje_cumplimiento']}%"
                 ]
@@ -145,8 +147,8 @@ class ReporteController:
             ]
             estilizar_hoja(
                 ws2,
-                "Rendimiento y Asistencia por Voluntario",
-                ["CI", "Voluntario", "Estado", "Asignadas", "Asistencias", "Faltas", "Horas Totales", "% Cumplimiento"],
+                "Rendimiento, Asistencia y Strikes por Voluntario",
+                ["CI", "Voluntario", "Estado", "Asignadas", "Asistencias", "Faltas", "Strikes", "Horas Totales", "% Cumplimiento"],
                 filas_rend
             )
 

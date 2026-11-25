@@ -1,18 +1,4 @@
-# Archivos compilados de Python
+﻿.venv/
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Entornos virtuales
-venv/
-env/
-.venv/
-
-# Configuraciones locales de IDE
+*.pyc
 .vscode/
-.idea/
-
-# Variables de entorno y archivos temporales
-.env
-*.log
-*.xlsx

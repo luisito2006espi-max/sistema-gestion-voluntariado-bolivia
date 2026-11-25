@@ -1,6 +1,5 @@
 import re
 import tkinter as tk
-import ttkbootstrap as tb
 
 
 # Paleta Institucional: Save the Children Bolivia (Rojo, Blanco, Negro y Plomo)
@@ -71,13 +70,11 @@ class SaveTheChildrenLogo(tk.Canvas):
 
     def _dibujar(self, s: int):
         pad = 2
-        # Círculo rojo institucional
         self.create_oval(
             pad, pad, s - pad, s - pad,
             fill=PALETTE["rojo"],
             outline=PALETTE["rojo"]
         )
-        # Cabeza estilizada en blanco
         cx = s * 0.50
         head_r = s * 0.13
         head_y = s * 0.31
@@ -87,7 +84,6 @@ class SaveTheChildrenLogo(tk.Canvas):
             fill=PALETTE["blanco"],
             outline=""
         )
-        # Brazos abiertos / arco protector en blanco
         lw = max(2, int(s * 0.085))
         self.create_arc(
             s * 0.22, s * 0.26, s * 0.78, s * 0.72,
@@ -96,7 +92,6 @@ class SaveTheChildrenLogo(tk.Canvas):
             outline=PALETTE["blanco"],
             width=lw
         )
-        # Cuerpo estilizado
         self.create_line(
             cx, s * 0.48, cx, s * 0.78,
             fill=PALETTE["blanco"],
@@ -137,20 +132,20 @@ class RoundedCard(tk.Canvas):
         self.pad_y = pady
         self.expand_body = expand_body
 
-        def lift(self, aboveThis=None):
-            """Eleva la tarjeta completa en la ventana sin confundirse con Canvas.tag_raise."""
-            tk.Misc.lift(self, aboveThis)
-
-        def lower(self, belowThis=None):
-            """Envía la tarjeta completa al fondo sin confundirse con Canvas.tag_raise."""
-            tk.Misc.lower(self, belowThis)
-
         self.body = tk.Frame(self, bg=bg_color)
         self._win_id = self.create_window(self.pad_x, self.pad_y, window=self.body, anchor="nw")
 
         self.bind("<Configure>", self._on_canvas_configure)
         if not self.expand_body:
             self.body.bind("<Configure>", self._on_body_configure)
+
+    def lift(self, aboveThis=None):
+        """Eleva la tarjeta completa en la ventana sin confundirse con Canvas.tag_raise."""
+        tk.Misc.lift(self, aboveThis)
+
+    def lower(self, belowThis=None):
+        """Envía la tarjeta completa al fondo sin confundirse con Canvas.tag_lower."""
+        tk.Misc.lower(self, belowThis)
 
     @staticmethod
     def _puntos_redondeados(x1: float, y1: float, x2: float, y2: float, r: float) -> list[float]:
@@ -190,7 +185,6 @@ class RoundedCard(tk.Canvas):
         self.delete("card_bg")
         r = min(self.radius, w // 2, h // 2)
 
-        # Borde exterior sutil
         if self.border_color:
             pts_borde = self._puntos_redondeados(0, 0, w - 1, h - 1, r)
             self.create_polygon(

@@ -1,6 +1,16 @@
-CREATE DATABASE save_the_children_bolivia;
+-- ============================================================================
+-- SAVE THE CHILDREN BOLIVIA - SISTEMA DE GESTIÓN DE VOLUNTARIADO (v1.1)
+-- Respaldo Completo de Estructura, Disparadores y Catálogos Base
+-- ============================================================================
 
-USE save_the_children_bolivia;
+DROP DATABASE IF EXISTS save_the_children_bolivia_db;
+CREATE DATABASE save_the_children_bolivia_db;
+
+USE save_the_children_bolivia_db;
+
+-- ============================================================================
+-- 1. SEGURIDAD, ROLES Y AUDITORÍA
+-- ============================================================================
 
 CREATE TABLE ROL (
     id_rol INT AUTO_INCREMENT PRIMARY KEY,
@@ -30,6 +40,10 @@ CREATE TABLE AUDITORIA_ACCESO (
     INDEX idx_auditoria_fecha (fecha_hora_acceso)
 );
 
+-- ============================================================================
+-- 2. CATÁLOGOS DE ESTADOS (3FN)
+-- ============================================================================
+
 CREATE TABLE ESTADO_VOLUNTARIO (
     id_estado_vol INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(30) NOT NULL UNIQUE
@@ -45,11 +59,16 @@ CREATE TABLE ESTADO_ASIGNACION (
     nombre VARCHAR(30) NOT NULL UNIQUE
 );
 
+-- ============================================================================
+-- 3. VOLUNTARIADO, ACTIVIDADES, ASIGNACIONES Y ASISTENCIA
+-- ============================================================================
+
 CREATE TABLE VOLUNTARIO (
     id_voluntario INT AUTO_INCREMENT PRIMARY KEY,
     ci VARCHAR(20) NOT NULL UNIQUE,
     nombres VARCHAR(80) NOT NULL,
-    apellidos VARCHAR(80) NOT NULL,
+    apellido_paterno VARCHAR(60) NOT NULL,
+    apellido_materno VARCHAR(60) NULL,
     fecha_nacimiento DATE NULL,
     telefono VARCHAR(20) NULL,
     correo VARCHAR(120) NULL,
@@ -57,7 +76,7 @@ CREATE TABLE VOLUNTARIO (
     habilidades VARCHAR(200) NULL,
     disponibilidad VARCHAR(100) NULL,
     id_estado_vol INT NOT NULL DEFAULT 1,
-    fecha_registro DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    fecha_inscripcion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_admision DATE NULL,
     id_usuario INT NULL UNIQUE,
     id_usuario_registra INT NULL,
@@ -95,11 +114,12 @@ CREATE TABLE ACTIVIDAD (
     INDEX idx_actividad_fecha (fecha)
 );
 
-CREATE TABLE ASIGNACION_VOLUNTARIO (
+CREATE TABLE ASIGNACION (
     id_asignacion INT AUTO_INCREMENT PRIMARY KEY,
     id_actividad INT NOT NULL,
     id_voluntario INT NOT NULL,
     id_estado_asignacion INT NOT NULL DEFAULT 1,
+    id_admin_asigna INT NULL,
     fecha_asignacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_actividad_voluntario UNIQUE (id_actividad, id_voluntario),
     CONSTRAINT fk_asignacion_actividad
@@ -110,7 +130,10 @@ CREATE TABLE ASIGNACION_VOLUNTARIO (
         ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT fk_asignacion_estado
         FOREIGN KEY (id_estado_asignacion) REFERENCES ESTADO_ASIGNACION(id_estado_asignacion)
-        ON UPDATE CASCADE ON DELETE RESTRICT
+        ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_asignacion_admin
+        FOREIGN KEY (id_admin_asigna) REFERENCES USUARIO(id_usuario)
+        ON UPDATE CASCADE ON DELETE SET NULL
 );
 
 CREATE TABLE ASISTENCIA (
@@ -123,16 +146,20 @@ CREATE TABLE ASISTENCIA (
     id_usuario_registra INT NULL,
     CONSTRAINT chk_asistencia_horas CHECK (horas_cumplidas >= 0),
     CONSTRAINT fk_asistencia_asignacion
-        FOREIGN KEY (id_asignacion) REFERENCES ASIGNACION_VOLUNTARIO(id_asignacion)
+        FOREIGN KEY (id_asignacion) REFERENCES ASIGNACION(id_asignacion)
         ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT fk_asistencia_usuario
         FOREIGN KEY (id_usuario_registra) REFERENCES USUARIO(id_usuario)
         ON UPDATE CASCADE ON DELETE SET NULL
 );
 
+-- ============================================================================
+-- 4. DONANTES Y DONACIONES (MONETARIAS Y EN ESPECIE)
+-- ============================================================================
+
 CREATE TABLE DONANTE (
     id_donante INT AUTO_INCREMENT PRIMARY KEY,
-    documento VARCHAR(30) NULL UNIQUE,
+    ci_nit VARCHAR(30) NULL UNIQUE,
     nombre VARCHAR(150) NOT NULL,
     telefono VARCHAR(20) NULL,
     correo VARCHAR(120) NULL,
@@ -163,7 +190,7 @@ CREATE TABLE DONACION (
     id_tipo_donacion INT NOT NULL,
     monto DECIMAL(10,2) NULL,
     id_metodo_pago INT NULL,
-    fecha DATE NOT NULL,
+    fecha_donacion DATE NOT NULL,
     observaciones VARCHAR(255) NULL,
     id_usuario_registra INT NOT NULL,
     fecha_registro TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -179,7 +206,7 @@ CREATE TABLE DONACION (
     CONSTRAINT fk_donacion_usuario
         FOREIGN KEY (id_usuario_registra) REFERENCES USUARIO(id_usuario)
         ON UPDATE CASCADE ON DELETE RESTRICT,
-    INDEX idx_donacion_fecha (fecha)
+    INDEX idx_donacion_fecha (fecha_donacion)
 );
 
 CREATE TABLE DONACION_DETALLE (
@@ -196,6 +223,10 @@ CREATE TABLE DONACION_DETALLE (
         ON UPDATE CASCADE ON DELETE RESTRICT
 );
 
+-- ============================================================================
+-- 5. DISPARADORES (TRIGGERS) DE AUDITORÍA, HORA EXACTA, CUPOS Y STOCK
+-- ============================================================================
+
 DELIMITER //
 
 CREATE TRIGGER trg_auditoria_login
@@ -209,8 +240,17 @@ BEGIN
     END IF;
 END//
 
+CREATE TRIGGER trg_voluntario_hora_inscripcion
+BEFORE INSERT ON VOLUNTARIO
+FOR EACH ROW
+BEGIN
+    IF NEW.fecha_inscripcion IS NULL OR TIME(NEW.fecha_inscripcion) = '00:00:00' THEN
+        SET NEW.fecha_inscripcion = NOW();
+    END IF;
+END//
+
 CREATE TRIGGER trg_validar_asignacion_bi
-BEFORE INSERT ON ASIGNACION_VOLUNTARIO
+BEFORE INSERT ON ASIGNACION
 FOR EACH ROW
 BEGIN
     DECLARE v_estado_vol VARCHAR(30);
@@ -232,7 +272,7 @@ BEGIN
     WHERE id_actividad = NEW.id_actividad;
 
     SELECT COUNT(*) INTO v_asignados
-    FROM ASIGNACION_VOLUNTARIO a
+    FROM ASIGNACION a
     INNER JOIN ESTADO_ASIGNACION ea ON a.id_estado_asignacion = ea.id_estado_asignacion
     WHERE a.id_actividad = NEW.id_actividad
       AND ea.nombre = 'Confirmada';
@@ -288,6 +328,10 @@ BEGIN
 END//
 
 DELIMITER ;
+
+-- ============================================================================
+-- 6. CATÁLOGOS BASE (SIN INSERT INTO USUARIO -> SE CREA CON seed_admin.py)
+-- ============================================================================
 
 INSERT INTO ROL (id_rol, nombre) VALUES
 (1, 'Administrador'),
